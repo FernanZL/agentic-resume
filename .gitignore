@@ -10,3 +10,4 @@ htmlcov/
 node_modules/
 web/dist/
 evals/results/
+*.tsbuildinfo

@@ -1,1 +1,0 @@
-{"root":["./src/App.tsx","./src/api.ts","./src/connection.ts","./src/events.ts","./src/main.tsx","./src/vite-env.d.ts","./src/components/ExportPanel.tsx","./src/components/Icons.tsx","./src/components/ReviewPanel.tsx","./src/components/StartScreen.tsx","./src/components/TimelinePanel.tsx","./src/mock/fixtures.ts","./src/test/app.test.tsx","./src/test/setup.ts"],"version":"5.7.3"}
