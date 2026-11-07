@@ -1,6 +1,7 @@
 """The final documents as files: an ATS-safe single-column DOCX of the resume, and
 Markdown with the resume and the LinkedIn copy."""
 
+import html
 import io
 import re
 
@@ -84,3 +85,73 @@ def _education(document, profile: CandidateProfile) -> None:
         line += f" ({school.year})" if school.year else ""
         line += f" — {school.details}" if school.details else ""
         document.add_paragraph(line)
+
+
+PRINT_CSS = """
+@page { size: A4; margin: 16mm 18mm; }
+body { font: 10.5pt/1.45 Georgia, 'Times New Roman', serif; color: #111; max-width: 780px;
+       margin: 24px auto; padding: 0 16px; }
+h1 { font-size: 20pt; margin: 0; } h2 { font-size: 11pt; text-transform: uppercase;
+     letter-spacing: .08em; border-bottom: 1px solid #999; margin: 18px 0 6px; }
+h3 { font-size: 10.5pt; margin: 10px 0 0; } .muted { color: #444; } ul { margin: 4px 0; }
+.linkedin { page-break-before: always; } pre { white-space: pre-wrap; font: inherit; }
+@media print { body { margin: 0; padding: 0; } }
+"""
+
+
+def html_page(final: FinalDocuments) -> str:
+    """The resume (then the LinkedIn copy on its own page) as one escaped HTML page to
+    print or save as PDF: single column, no scripts."""
+    r, e = final.resume, html.escape
+    parts = [f"<h1>{e(r.name or 'Resume')}</h1>"]
+    if r.headline:
+        parts.append(f"<p><strong>{e(r.headline)}</strong></p>")
+    if r.contact:
+        parts.append(f"<p class='muted'>{e(' · '.join(r.contact))}</p>")
+    if r.summary:
+        parts.append(f"<h2>Summary</h2><p>{e(r.summary)}</p>")
+    if r.experience:
+        parts.append("<h2>Experience</h2>")
+    for role in r.experience:
+        where = ", ".join(x for x in (role.organization, role.location) if x)
+        dates = " – ".join(x for x in (role.start, role.end) if x)
+        bullets = "".join(f"<li>{e(b.text)}</li>" for b in role.bullets)
+        parts.append(
+            f"<h3>{e(role.title)} — {e(where)}</h3><p class='muted'>{e(dates)}</p>"
+            f"<ul>{bullets}</ul>"
+        )
+    parts += _html_lists(r)
+    if final.linkedin:
+        blocks = "".join(
+            f"<h2>{e(LINKEDIN_TITLES.get(t, f'Experience ({t})'))}</h2><pre>{e(c)}</pre>"
+            for t, c in final.linkedin.items()
+        )
+        parts.append(f"<section class='linkedin'><h1>LinkedIn</h1>{blocks}</section>")
+    title = e(f"{r.name or 'Resume'} — resume")
+    return (
+        f"<!doctype html><html lang='en'><head><meta charset='utf-8'><title>{title}</title>"
+        f"<meta name='viewport' content='width=device-width, initial-scale=1'>"
+        f"<style>{PRINT_CSS}</style></head><body>{''.join(parts)}</body></html>"
+    )
+
+
+def _html_lists(r: CandidateProfile) -> list[str]:
+    e = html.escape
+    parts = []
+    if r.education:
+        items = "".join(
+            f"<li><strong>{e(s.degree)}</strong>, {e(s.institution)}"
+            f"{e(f' ({s.year})' if s.year else '')}</li>"
+            for s in r.education
+        )
+        parts.append(f"<h2>Education</h2><ul>{items}</ul>")
+    if r.skills:
+        parts.append(f"<h2>Skills</h2><p>{e(', '.join(r.skills))}</p>")
+    for title, items in (
+        ("Certifications", r.certifications),
+        ("Languages", r.languages),
+        ("Other", r.other),
+    ):
+        if items:
+            parts.append(f"<h2>{title}</h2><ul>{''.join(f'<li>{e(i)}</li>' for i in items)}</ul>")
+    return parts

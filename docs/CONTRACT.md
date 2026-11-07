@@ -21,7 +21,7 @@ Anything in this document that disagrees with those files is a mistake here.
 | `POST /api/sessions/{id}/review` | `ReviewSubmit` → `RunAccepted` (202) | 409 `no_review_pending`, 409 `run_active` |
 | `POST /api/sessions/{id}/resume` | no body → `RunAccepted` (202). Continues an `interrupted` session. | 409 `not_interrupted` |
 | `GET /api/sessions/{id}/events` | `text/event-stream`, see below | 404 |
-| `GET /api/sessions/{id}/export?format=docx\|md` | the file (attachment). Uses accepted and edited proposals; works only after a review. | 409 `not_reviewed` |
+| `GET /api/sessions/{id}/export?format=docx\|md\|html\|json` | The reviewed documents, built from the accepted and edited proposals. `docx` and `md` are attachments. `html` is a print-ready page (open it, then print or Save as PDF; strict CSP, no scripts). `json` is `{resume: CandidateProfile, linkedin: {target: text}}`, for the export panel and the LinkedIn copy buttons. Works only after review (`snapshot.reviewed`). | 409 `not_reviewed` |
 
 Errors are always `{"detail": "<code or message>"}`.
 

@@ -77,6 +77,7 @@ class SessionSnapshot(BaseModel):
     gap: GapReport | None
     proposals: list[Proposal]
     decisions: dict[str, Decision]
+    reviewed: bool = Field(description="The review is done: exports work, decisions are final")
     cost_usd: float
     last_event_id: int = Field(description="Open the event stream after this id")
 

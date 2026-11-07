@@ -311,3 +311,29 @@ async def test_events_carry_no_document_text(client, services):
     ready = [e for e in events if e["type"] == "proposals_ready"]
     assert ready
     assert all(set(e["data"]) == {"round", "proposal_ids"} for e in ready)
+
+
+async def test_reviewed_documents_export_as_print_html_and_json(client, services, script):
+    script.overrides["resume_writer"] = lambda messages: stubs.call(
+        "Drafts",
+        proposals=[
+            {
+                "target": "summary",
+                "proposed": "<script>alert(1)</script> Payments engineer",
+                "rationale": "x",
+            }
+        ],
+    )
+    session_id = await new_session(client, services, linkedin=False)
+    assert (await client.get(f"/api/sessions/{session_id}")).json()["reviewed"] is False
+    accept = {"resume:summary": {"action": "accept", "text": ""}}
+    await client.post(f"/api/sessions/{session_id}/review", json={"decisions": accept})
+    await services.runner.wait(session_id)
+    assert (await client.get(f"/api/sessions/{session_id}")).json()["reviewed"] is True
+
+    page = await client.get(f"/api/sessions/{session_id}/export?format=html")
+    assert page.headers["content-security-policy"].startswith("default-src 'none'")
+    assert "<script>" not in page.text and "&lt;script&gt;" in page.text
+    final = (await client.get(f"/api/sessions/{session_id}/export?format=json")).json()
+    assert final["resume"]["summary"].endswith("Payments engineer")
+    assert final["resume"]["name"] == "Alex Rivera"

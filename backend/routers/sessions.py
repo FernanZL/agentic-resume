@@ -4,7 +4,7 @@ the live event stream."""
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Header, HTTPException, Query, Request, Response
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.types import Command
 
@@ -122,6 +122,7 @@ async def get_session(svc: Svc, session_id: str) -> SessionSnapshot:
         gap=values.get("gap"),
         proposals=sorted(proposals, key=lambda p: p.id),
         decisions=values.get("decisions") or {},
+        reviewed=bool(values.get("analyzed")),
         cost_usd=round(await svc.db.session_cost(session_id), 4),
         last_event_id=cursor,
     )
@@ -161,15 +162,27 @@ async def resume_session(svc: Svc, session_id: str) -> RunAccepted:
     return await start(svc, session_id, "resume", None)
 
 
+EXPORT_TYPES = {
+    "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "md": "text/markdown; charset=utf-8",
+    "html": "text/html; charset=utf-8",
+}
+# The print view is our own escaped HTML; it may not run or load anything.
+PRINT_CSP = "default-src 'none'; style-src 'unsafe-inline'; img-src data:"
+
+
 @router.get(
     "/{session_id}/export",
     operation_id="export_session",
-    responses={200: {"content": {"application/octet-stream": {}}}},
+    responses={200: {"content": {media: {} for media in EXPORT_TYPES.values()}}},
 )
 async def export_session(
-    svc: Svc, session_id: str, format: Annotated[Literal["docx", "md"], Query()] = "docx"
+    svc: Svc,
+    session_id: str,
+    format: Annotated[Literal["docx", "md", "html", "json"], Query()] = "docx",
 ) -> Response:
-    """Download the improved resume (DOCX), or resume and LinkedIn copy (Markdown)."""
+    """The reviewed documents: DOCX resume, Markdown (resume + LinkedIn), a print-ready HTML
+    page (for Save as PDF), or JSON (resume + LinkedIn copy) for the app to show."""
     await session_row(svc, session_id)
     values = await graph_values(svc, session_id)
     if not values.get("analyzed"):
@@ -180,17 +193,18 @@ async def export_session(
         {pid: p for pid, p in values["proposals"].items() if p},
         values.get("decisions") or {},
     )
+    if format == "json":
+        return JSONResponse(final.model_dump(mode="json"))
+    if format == "html":
+        return Response(
+            export.html_page(final),
+            media_type=EXPORT_TYPES["html"],
+            headers={"Content-Security-Policy": PRINT_CSP},
+        )
     name = export.filename(final.resume, values["target"].title, format)
     headers = {"Content-Disposition": f'attachment; filename="{name}"'}
-    if format == "md":
-        return Response(
-            export.markdown(final), media_type="text/markdown; charset=utf-8", headers=headers
-        )
-    return Response(
-        export.docx_bytes(final.resume),
-        headers=headers,
-        media_type=("application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
-    )
+    body = export.markdown(final) if format == "md" else export.docx_bytes(final.resume)
+    return Response(body, media_type=EXPORT_TYPES[format], headers=headers)
 
 
 @router.get(

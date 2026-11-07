@@ -27,7 +27,7 @@ FROM base AS prod
 COPY agent ./agent
 COPY backend ./backend
 COPY --from=web /web/dist ./web/dist
-RUN useradd --create-home app && chown -R app /app
+RUN useradd --create-home app  # /app stays root-owned: the app only reads it
 USER app
 ENV PORT=8000
 EXPOSE 8000
