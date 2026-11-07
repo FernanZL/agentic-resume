@@ -10,6 +10,7 @@ from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.prebuilt import ToolNode
+from langgraph.prebuilt.tool_node import ToolInvocationError
 
 from agent.analysis import MAX_CONCURRENCY, build_analysis
 from agent.concierge import make_concierge, make_tools
@@ -21,10 +22,15 @@ RECURSION_LIMIT = 80
 
 
 def tool_error(error: Exception) -> str:
-    """A failing tool is reported to the concierge, unless the run must stop."""
+    """A failing tool, as the concierge is told of it, unless the run must stop. Invalid
+    arguments are described (only the model's own arguments, so it can correct the call);
+    any other failure by its type alone, since its message can echo document or web text
+    into the model's context and into traces."""
     if isinstance(error, StopRun):
         raise error
-    return f"The tool failed: {type(error).__name__}: {error}"
+    if isinstance(error, ToolInvocationError):
+        return error.message
+    return f"The tool failed ({type(error).__name__})."
 
 
 def after_concierge(state: SessionState) -> str:

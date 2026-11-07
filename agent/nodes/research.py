@@ -4,11 +4,11 @@ parallel through Send. Each keeps its own private messages and writes only its r
 import json
 
 import httpx
-import openai
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage, ToolMessage
 from langchain_core.tools import BaseTool
 from langgraph.types import RetryPolicy, Send
+from openrouter import errors as openrouter_errors
 from pydantic import BaseModel
 
 from agent.events import emit, step
@@ -53,15 +53,19 @@ SCHEMAS: dict[ReportKind, type[BaseModel]] = {
     ReportKind.MARKET: MarketBrief,
     ReportKind.LINKEDIN: LinkedInAudit,
 }
-# Failures worth another attempt; anything else becomes an error in the report.
+# Failures worth another attempt (the SDK itself retries 5XX only); anything else
+# becomes an error in the report.
 RETRY = RetryPolicy(
     max_attempts=3,
     initial_interval=2.0,
     retry_on=(
-        openai.RateLimitError,
-        openai.APITimeoutError,
-        openai.APIConnectionError,
+        openrouter_errors.TooManyRequestsResponseError,
+        openrouter_errors.ProviderOverloadedResponseError,
+        openrouter_errors.RequestTimeoutResponseError,
+        openrouter_errors.EdgeNetworkTimeoutResponseError,
+        openrouter_errors.NoResponseError,
         httpx.TimeoutException,
+        httpx.NetworkError,
     ),
 )
 

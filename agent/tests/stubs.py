@@ -7,7 +7,13 @@ from collections.abc import Callable
 from typing import Any
 
 from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
-from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, ToolMessage
+from langchain_core.messages import (
+    AIMessage,
+    BaseMessage,
+    HumanMessage,
+    ToolMessage,
+    UsageMetadata,
+)
 from langchain_core.outputs import ChatGeneration, ChatResult
 from langchain_core.tools import tool
 
@@ -16,8 +22,9 @@ from agent.schemas import TargetJob
 from agent.toolbox import Toolbox
 from agent.tools.fetch_url import FetchResult
 
-# What OpenRouter reports for each reply.
-USAGE = {"prompt_tokens": 1000, "completion_tokens": 200, "cost": 0.002}
+# What each reply reports, as ChatOpenRouter gives it: LangChain's usage, OpenRouter's cost.
+USAGE = UsageMetadata(input_tokens=1000, output_tokens=200, total_tokens=1200)
+COST = 0.002
 IDS = itertools.count()
 
 RESUME = """Alex Rivera
@@ -231,11 +238,13 @@ class StubModel(GenericFakeChatModel):
         if isinstance(reply, BaseException):
             raise reply
         reply = reply.model_copy(
-            update={"id": f"msg-{next(IDS)}", "response_metadata": {"token_usage": USAGE}}
+            update={
+                "id": f"msg-{next(IDS)}",
+                "usage_metadata": USAGE,
+                "response_metadata": {"cost": COST},
+            }
         )
-        return ChatResult(
-            generations=[ChatGeneration(message=reply)], llm_output={"token_usage": USAGE}
-        )
+        return ChatResult(generations=[ChatGeneration(message=reply)])
 
 
 def models(script: Script | None = None) -> Models:

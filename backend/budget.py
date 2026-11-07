@@ -54,22 +54,20 @@ class Budget:
 
 
 def usage_from(response: LLMResult) -> tuple[int, int, float]:
-    """Tokens and cost from a model call, wherever the provider put them."""
-    usage: dict[str, Any] = dict((response.llm_output or {}).get("token_usage") or {})
+    """A model call's tokens (LangChain's usage metadata) and its cost in US dollars (as
+    OpenRouter reports it in the response metadata; zero when it doesn't)."""
+    input_tokens = output_tokens = 0
+    cost = 0.0
     for generations in response.generations:
         for generation in generations:
             message = getattr(generation, "message", None)
             if message is None:
                 continue
-            usage = {**(message.response_metadata.get("token_usage") or {}), **usage}
-            meta = message.usage_metadata or {}
-            usage.setdefault("prompt_tokens", meta.get("input_tokens", 0))
-            usage.setdefault("completion_tokens", meta.get("output_tokens", 0))
-    return (
-        int(usage.get("prompt_tokens") or 0),
-        int(usage.get("completion_tokens") or 0),
-        float(usage.get("cost") or 0.0),
-    )
+            usage = message.usage_metadata or {}
+            input_tokens += usage.get("input_tokens", 0)
+            output_tokens += usage.get("output_tokens", 0)
+            cost += float(message.response_metadata.get("cost") or 0.0)
+    return input_tokens, output_tokens, cost
 
 
 class CostRecorder(AsyncCallbackHandler):

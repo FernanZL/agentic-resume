@@ -26,6 +26,35 @@ STOPPED = (
     "I've done as much as I can for this message. Tell me what you'd like next, "
     "and I'll pick it up from here."
 )
+# Added to the concierge's call (not the history) on its first turn after the analysis.
+# Without it the model answers the last message it sees, "Analysis started", as if the
+# analysis were still to come.
+ANALYSIS_DONE = (
+    "The analysis has finished and the user has reviewed the proposals (see the status). "
+    "Tell them the outcome in a few lines: the match score, the main gaps, and that they "
+    "can export the reviewed documents now."
+)
+
+
+def analysis_just_finished(state: SessionState) -> bool:
+    """The concierge is back from the analysis: request_analysis's result is the last
+    message, and the analysis is done (not a later tool's result)."""
+    messages = state.get("messages") or []
+    last = messages[-1] if messages else None
+    return bool(
+        state.get("analyzed") and isinstance(last, ToolMessage) and last.name == "request_analysis"
+    )
+
+
+def from_user(field: str, value: str, state: SessionState) -> str:
+    """A posting field the model filled in, kept only if the user gave it: already known,
+    or written in the chat. Models fill such fields with placeholders ("[the posting]"),
+    which would replace the posting the user pasted in the form."""
+    target = state.get("target")
+    if not value or (target and value == getattr(target, field)):
+        return value
+    said = " ".join(m.text for m in state.get("messages") or [] if isinstance(m, HumanMessage))
+    return value if " ".join(value.split()) in " ".join(said.split()) else ""
 
 
 def status(state: SessionState) -> str:
@@ -81,12 +110,13 @@ def make_tools(models: Models) -> list[BaseTool]:
         notes: str = "",
     ) -> Command:
         """Run the full analysis for this target role. Leave a field empty to keep what is
-        already known. Starts the research team; previous results are replaced."""
+        already known. job_url and job_text only when the user wrote them in this chat,
+        copied exactly. Starts the research team; previous results are replaced."""
         update = {
             "title": title,
             "company": company,
-            "job_url": job_url,
-            "job_text": job_text,
+            "job_url": from_user("job_url", job_url, state),
+            "job_text": from_user("job_text", job_text, state),
             "notes": notes,
         }
         target = state["target"].model_copy(update={k: v for k, v in update.items() if v})
@@ -102,7 +132,11 @@ def make_tools(models: Models) -> list[BaseTool]:
                 "gap": None,
                 "analyzed": False,
                 "messages": [
-                    ToolMessage(f"Analysis started for {target.title}.", tool_call_id=tool_call_id)
+                    ToolMessage(
+                        f"Analysis started for {target.title}.",
+                        name="request_analysis",
+                        tool_call_id=tool_call_id,
+                    )
                 ],
             }
         )
@@ -205,7 +239,10 @@ def make_concierge(models: Models, tools: list[BaseTool]):
             reply = AIMessage(STOPPED)
         else:
             system = SystemMessage(prompt("concierge").format(status=status(state)))
-            reply = await bound.ainvoke([system, *state["messages"]])
+            messages = [system, *state["messages"]]
+            if analysis_just_finished(state):
+                messages.append(SystemMessage(ANALYSIS_DONE))
+            reply = await bound.ainvoke(messages)
         if reply.text and not reply.tool_calls:
             emit("message", "concierge", id=reply.id or "", role="assistant", content=reply.text)
         return {"messages": [reply], "route": None, "model_calls": 1}

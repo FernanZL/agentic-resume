@@ -7,7 +7,7 @@ Portfolio project that both **demonstrates** multi-agent engineering skills and 
 Design reviewed in two rounds with **argon** (Antigravity agent in Herdr pane `w8:p3`); its corrections are folded in.
 
 **Decisions taken (user):**
-- **LLM**: OpenRouter via `langchain-openai` (undercover `agent/openrouter.py` pattern, cost read from `usage.cost`, model per node configurable by env).
+- **LLM**: OpenRouter via `langchain-openrouter` (`ChatOpenRouter`: cost from OpenRouter's `usage.cost`, reasoning kept, model per node configurable by env).
 - **Demo access**: shared `DEMO_PASSCODE` header gate + `MAX_DAILY_COST_USD` breaker; no user accounts.
 - **Web search**: Tavily (`langchain-tavily`); `fetch_url` = httpx + trafilatura.
 - **Frontend**: full React/Vite SPA in v1 (chat, live SSE timeline, diff review).
@@ -109,7 +109,7 @@ Dockerfile (multi-stage: node build → python/uv slim), docker-compose.yml, ren
 - **Render**: **one** Docker web service (FastAPI serves `/api` + built SPA; graphs run in-process; `--workers 1`) + Postgres (Supabase free — Render free PG expires after 30 days, as in undercover). Declared in `render.yaml` Blueprint (undercover set Render up by hand). `agent/` stays an importable package so it can be split into its own service later.
 - **Privacy**: the session UUID works like a password, so it's treated as one. Documents can only be read through the session that owns them (no access by bare `document_id`). Raw resume text and PII never go into logs. `run_events` carry ids and codes for reports, proposals and failures (the content is read from the checkpoint through the snapshot); only the chat streams its text. Exception messages are not logged unless `LOG_ERROR_DETAILS` is set.
 - **Cost guard**: `budget.py` checks `sum(cost)` of `model_calls` over 24 h against `MAX_DAILY_COST_USD` before a run starts **and** before every model call (cost middleware, `before_model`), with a per-run cost reservation so parallel fan-out branches can't overspend together; per-session model-call caps; `X-Demo-Passcode` checked (`secrets.compare_digest`) on all **mutating** (POST) routes only. GETs, including SSE, are reached by the unguessable session UUID, because the browser's `EventSource` cannot send custom headers.
-- **Observability**: Langfuse callback per run (session id as trace session), cost per call in `model_calls`.
+- **Observability**: one Langfuse trace per run (`backend/tracing.py`: session id as trace session, step-named generations with reasoning, contact details masked), cost per call in `model_calls`.
 - **Config**: env vars read in one module (`settings.py`); `.env` locally.
 
 ## 6. Risks

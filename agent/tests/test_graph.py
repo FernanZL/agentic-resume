@@ -4,11 +4,13 @@ review pause inside the subgraph, re-analysis and revisions."""
 import itertools
 
 import pytest
-from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langgraph.types import Command
 
 from agent.checkpoints import memory_saver
-from agent.graph import build_graph, run_config
+from agent.concierge import ANALYSIS_DONE, analysis_just_finished, from_user
+from agent.graph import build_graph, run_config, tool_error
+from agent.llm import StopRun
 from agent.nodes.review import resume_with
 from agent.render import apply_decisions, profile_markdown
 from agent.schemas import Action, Decision, ProposalStatus, TargetJob
@@ -90,6 +92,52 @@ async def test_the_review_resumes_through_the_parent_and_finalizes():
     assert final.resume.experience[1].bullets[0].text == "Owned the checkout service."
     assert final.linkedin["headline"] == "Engineer at Fintech Co"  # rejected: unchanged
     assert "## Experience" in profile_markdown(final.resume)
+
+
+async def test_after_the_review_the_concierge_is_told_the_analysis_is_done():
+    seen: list[list] = []
+
+    def concierge(messages):
+        seen.append(messages)
+        return stubs.Script().concierge(messages)
+
+    graph = graph_on(stubs.Script(concierge=concierge))
+    await run(graph, stubs.first_input())
+    assert not any(ANALYSIS_DONE in str(m.content) for m in seen[-1])
+    await run(graph, Command(resume=resume_with({})))
+    assert seen[-1][-1].content == ANALYSIS_DONE
+    state = await graph.aget_state(run_config("s1", "r1"))
+    assert ANALYSIS_DONE not in str(state.values["messages"])  # not kept in the history
+
+
+def test_the_analysis_note_is_only_for_the_turn_back_from_the_analysis():
+    def after(tool: str, analyzed: bool = True) -> dict:
+        reply = ToolMessage("done", name=tool, tool_call_id="c1")
+        return {"analyzed": analyzed, "messages": [HumanMessage("go"), reply]}
+
+    assert analysis_just_finished(after("request_analysis"))
+    assert not analysis_just_finished(after("request_analysis", analyzed=False))
+    for later in ("get_report", "explain_proposal", "revise_proposal"):
+        assert not analysis_just_finished(after(later))
+    assert not analysis_just_finished({"analyzed": True, "messages": [HumanMessage("why?")]})
+
+
+def test_a_failing_tool_is_reported_without_its_message():
+    leak = RuntimeError("could not parse: Alex Rivera, alex.rivera@example.com")
+    assert tool_error(leak) == "The tool failed (RuntimeError)."
+    with pytest.raises(StopRun):
+        tool_error(StopRun("budget"))
+
+
+def test_a_posting_the_model_made_up_is_not_used():
+    state = {
+        "target": TargetJob(title="Engineer", job_text="The pasted posting."),
+        "messages": [HumanMessage("Here it is:\n  Senior   role, Kafka  ")],
+    }
+    assert from_user("job_text", "[Posting text provided by the user]", state) == ""
+    assert from_user("job_text", "The pasted posting.", state) == "The pasted posting."
+    assert from_user("job_text", "Senior role, Kafka", state) == "Senior role, Kafka"
+    assert from_user("job_url", "", state) == ""
 
 
 async def test_research_is_planned_from_what_is_known():

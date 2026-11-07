@@ -14,7 +14,14 @@ from agent.checkpoints import memory_saver, postgres_saver
 from backend.database import Database, engine_for
 from backend.routers import documents, sessions
 from backend.schemas import Health
-from backend.services import Services, Svc, build_services, real_models, real_toolbox
+from backend.services import (
+    Services,
+    Svc,
+    build_services,
+    real_models,
+    real_toolbox,
+    real_tracer,
+)
 from backend.settings import Settings, load
 
 log = logging.getLogger(__name__)
@@ -38,8 +45,10 @@ async def real_services(settings: Settings) -> AsyncIterator[Services]:
         else:
             log.warning("No DATABASE_URL: SQLite and in-memory checkpoints (local use only)")
             saver = memory_saver()
+        tracer = real_tracer(settings)
+        stack.callback(tracer.shutdown)  # last out: flushes the traces of runs cut off below
         svc = build_services(
-            settings, db, saver, real_models(settings), real_toolbox(settings, client)
+            settings, db, saver, real_models(settings), real_toolbox(settings, client), tracer
         )
         stack.push_async_callback(svc.runner.shutdown)
         yield svc

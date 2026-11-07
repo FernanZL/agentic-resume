@@ -21,7 +21,10 @@ class Settings:
     )
     max_upload_bytes: int = 2 * 1024 * 1024
     models: dict[str, str] = field(default_factory=lambda: dict.fromkeys(ROLES, DEFAULT_MODEL))
-    langfuse: bool = False  # LANGFUSE_* keys are set; the Langfuse client reads them itself
+    langfuse_public_key: str = ""  # tracing is on when both keys are set
+    langfuse_secret_key: str = ""
+    langfuse_base_url: str = "https://cloud.langfuse.com"  # US: https://us.cloud.langfuse.com
+    langfuse_environment: str = "development"  # "production" on Render
     sqlite_path: Path = ROOT / "agentic_resume.db"
     web_dist: Path = ROOT / "web" / "dist"
     cors_origins: tuple[str, ...] = ()
@@ -41,7 +44,10 @@ def load() -> Settings:
         call_reservation_usd=float(env.get("CALL_RESERVATION_USD", "0.02")),
         max_upload_bytes=int(env.get("MAX_UPLOAD_BYTES", str(2 * 1024 * 1024))),
         models={role: env.get(f"MODEL_{role.upper()}", default_model) for role in ROLES},
-        langfuse=bool(env.get("LANGFUSE_PUBLIC_KEY") and env.get("LANGFUSE_SECRET_KEY")),
+        langfuse_public_key=env.get("LANGFUSE_PUBLIC_KEY", ""),
+        langfuse_secret_key=env.get("LANGFUSE_SECRET_KEY", ""),
+        langfuse_base_url=env.get("LANGFUSE_BASE_URL", "https://cloud.langfuse.com"),
+        langfuse_environment=env.get("LANGFUSE_TRACING_ENVIRONMENT", "development"),
         sqlite_path=Path(env.get("SQLITE_PATH", str(ROOT / "agentic_resume.db"))),
         web_dist=Path(env.get("WEB_DIST", str(ROOT / "web" / "dist"))),
         cors_origins=tuple(o for o in env.get("CORS_ORIGINS", "").split(",") if o),

@@ -8,7 +8,6 @@ from typing import Annotated
 
 import httpx
 from fastapi import Depends, Header, HTTPException, Request
-from langchain_core.callbacks import BaseCallbackHandler
 from langgraph.checkpoint.base import BaseCheckpointSaver
 
 from agent.graph import build_graph
@@ -21,6 +20,7 @@ from backend.database import Database
 from backend.events import EventBus
 from backend.runner import Runner
 from backend.settings import Settings
+from backend.tracing import LangfuseTracer, Tracer
 
 
 @dataclass
@@ -32,12 +32,23 @@ class Services:
     budget: Budget
 
 
+# What each role's model calls are named in traces: stable, verb-first.
+STEP_NAMES = {
+    "concierge": "reply-to-user",
+    "intake": "read-documents",
+    "researcher": "research-target",
+    "analyst": "analyze-fit",
+    "writer": "rewrite-documents",
+    "critic": "check-rewrites",
+}
+
+
 def real_models(settings: Settings) -> Models:
     """The models on OpenRouter, one per role as configured."""
     key = settings.openrouter_api_key or "missing-key"  # calls fail clearly without one
 
     def model(role: str, temperature: float = 0.2):
-        return chat_model(settings.models[role], key, temperature)
+        return chat_model(settings.models[role], key, temperature, STEP_NAMES[role])
 
     return Models(
         concierge=model("concierge", 0.4),
@@ -57,27 +68,30 @@ def real_toolbox(settings: Settings, client: httpx.AsyncClient) -> Toolbox:
     )
 
 
-def langfuse_callbacks(settings: Settings):
-    """A Langfuse handler per run when Langfuse is configured (it reads its own keys)."""
-    if not settings.langfuse:
-        return lambda _session_id: []
-    from langfuse.langchain import CallbackHandler
-
-    def callbacks(_session_id: str) -> list[BaseCallbackHandler]:
-        return [CallbackHandler()]
-
-    return callbacks
+def real_tracer(settings: Settings) -> Tracer:
+    """Langfuse tracing when its keys are set, else none."""
+    if not (settings.langfuse_public_key and settings.langfuse_secret_key):
+        return Tracer()
+    return LangfuseTracer(
+        public_key=settings.langfuse_public_key,
+        secret_key=settings.langfuse_secret_key,
+        base_url=settings.langfuse_base_url,
+        environment=settings.langfuse_environment,
+    )
 
 
 def build_services(
-    settings: Settings, db: Database, saver: BaseCheckpointSaver, models: Models, toolbox: Toolbox
+    settings: Settings,
+    db: Database,
+    saver: BaseCheckpointSaver,
+    models: Models,
+    toolbox: Toolbox,
+    tracer: Tracer | None = None,
 ) -> Services:
     bus = EventBus(db)
     budget = Budget(db, settings.max_daily_cost_usd, settings.call_reservation_usd)
     graph = build_graph(models, toolbox, saver)
-    runner = Runner(
-        db, bus, graph, budget, langfuse_callbacks(settings), settings.log_error_details
-    )
+    runner = Runner(db, bus, graph, budget, tracer, settings.log_error_details)
     return Services(settings=settings, db=db, bus=bus, runner=runner, budget=budget)
 
 

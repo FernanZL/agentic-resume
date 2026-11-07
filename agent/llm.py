@@ -1,32 +1,31 @@
-"""The models the agents work with, through OpenRouter (an OpenAI-compatible API that
-reports each call's cost in its usage), and the one way to ask a model for a
-structured answer."""
+"""The models the agents work with, through OpenRouter (LangChain's own integration,
+which reports each call's cost and the model's reasoning), and the one way to ask a model
+for a structured answer."""
 
 from dataclasses import dataclass
-from typing import NamedTuple
 
 from langchain_core.language_models import BaseChatModel
-from langchain_core.messages import BaseMessage
 from langchain_core.runnables import Runnable, RunnableLambda
-from langchain_openai import ChatOpenAI
+from langchain_openrouter import ChatOpenRouter
 from pydantic import BaseModel, SecretStr
 
-OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
-MODEL_TIMEOUT = 120
-RETRIES = 3
+MODEL_TIMEOUT_MS = 120_000
+RETRY_WINDOW = 1  # the SDK retries 5XX for ~150 s per unit; 429s and timeouts: RETRY
 
 
-def chat_model(model: str, api_key: str, temperature: float = 0.2) -> ChatOpenAI:
-    """A model on OpenRouter, asking it to report each call's cost in its usage."""
-    return ChatOpenAI(
+def chat_model(
+    model: str, api_key: str, temperature: float = 0.2, name: str | None = None
+) -> ChatOpenRouter:
+    """A model on OpenRouter. The name is what traces call its calls (a step, never the
+    model id, which changes)."""
+    return ChatOpenRouter(
+        name=name,
         model=model,
-        base_url=OPENROUTER_BASE_URL,
         api_key=SecretStr(api_key),
         temperature=temperature,
-        timeout=MODEL_TIMEOUT,
-        max_retries=RETRIES,
-        extra_body={"usage": {"include": True}},
-        default_headers={"X-Title": "Agentic Resume"},
+        timeout=MODEL_TIMEOUT_MS,
+        max_retries=RETRY_WINDOW,
+        app_title="Agentic Resume",
     )
 
 
@@ -42,7 +41,7 @@ class NoStructuredAnswer(ValueError):
 def structured[T: BaseModel](model: BaseChatModel, schema: type[T]) -> Runnable:
     """The model, answering with an instance of the schema, or raising NoStructuredAnswer.
     Function calling is the method most OpenRouter models support."""
-    if isinstance(model, ChatOpenAI):
+    if isinstance(model, ChatOpenRouter):
         answering = model.with_structured_output(schema, method="function_calling")
     else:
         answering = model.with_structured_output(schema)
@@ -52,7 +51,9 @@ def structured[T: BaseModel](model: BaseChatModel, schema: type[T]) -> Runnable:
             raise NoStructuredAnswer(f"The model gave no {schema.__name__}.")
         return answer
 
-    return answering | RunnableLambda(required)
+    return (answering | RunnableLambda(required)).with_config(
+        run_name=f"answer-as-{schema.__name__}"
+    )
 
 
 @dataclass(frozen=True)
@@ -65,21 +66,3 @@ class Models:
     analyst: BaseChatModel  # LinkedIn audit, gap rubric
     writer: BaseChatModel  # resume and LinkedIn rewrites
     critic: BaseChatModel  # judges the rewrites
-
-
-class Usage(NamedTuple):
-    """A model call's tokens and its cost in US dollars."""
-
-    input_tokens: int
-    output_tokens: int
-    cost: float
-
-
-def usage_of(message: BaseMessage) -> Usage:
-    """A reply's tokens and cost, as OpenRouter reports them (zero when it doesn't)."""
-    usage = message.response_metadata.get("token_usage") or {}
-    return Usage(
-        int(usage.get("prompt_tokens") or 0),
-        int(usage.get("completion_tokens") or 0),
-        float(usage.get("cost") or 0.0),
-    )

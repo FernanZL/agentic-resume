@@ -6,10 +6,14 @@ import io
 import threading
 
 import docx
+import httpx
 import pytest
+from openrouter.errors import NoResponseError, OpenRouterError
 
+from agent.llm import NoStructuredAnswer
 from agent.tests import stubs
 from backend.budget import BudgetExceeded
+from backend.errors import error_code
 from backend.events import event_stream
 from backend.runner import RunActive
 
@@ -338,3 +342,12 @@ async def test_reviewed_documents_export_as_print_html_and_json(client, services
     final = (await client.get(f"/api/sessions/{session_id}/export?format=json")).json()
     assert final["resume"]["summary"].endswith("Payments engineer")
     assert final["resume"]["name"] == "Alex Rivera"
+
+
+def test_failures_are_reported_as_codes():
+    response = httpx.Response(429, request=httpx.Request("POST", "https://openrouter.ai"))
+    assert error_code(OpenRouterError("slow down", response)) == "model_error"
+    assert error_code(NoResponseError()) == "model_error"
+    assert error_code(BudgetExceeded("spent")) == "budget_exceeded"
+    assert error_code(NoStructuredAnswer("prose")) == "invalid_model_output"
+    assert error_code(KeyError("x")) == "internal_error"

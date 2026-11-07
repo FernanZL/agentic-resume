@@ -27,5 +27,7 @@ services:
         sync: false
       - key: LANGFUSE_SECRET_KEY
         sync: false
-      - key: LANGFUSE_HOST
+      - key: LANGFUSE_BASE_URL
         sync: false
+      - key: LANGFUSE_TRACING_ENVIRONMENT
+        value: production
