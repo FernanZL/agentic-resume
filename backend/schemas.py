@@ -86,15 +86,16 @@ class EventType(StrEnum):
     NODE_STARTED = "node_started"  # node: the step; data: {label}
     NODE_FINISHED = "node_finished"  # node; data: {label, seconds}
     TOOL_CALLED = "tool_called"  # node; data: {tool, summary}
-    TOKEN = "token"  # node 'concierge'; data: {text} (a chunk of the reply being written)
+    TOKEN = "token"  # noqa: S105  not a secret. node 'concierge'; data: {text} (a chunk of the reply being written)
     MESSAGE = "message"  # data: ChatMessage (a whole assistant reply)
-    REPORT_READY = "report_ready"  # data: Report
-    GAP_READY = "gap_ready"  # data: GapReport
-    PROPOSALS_READY = "proposals_ready"  # data: {proposals: [Proposal], round}
-    CRITIQUE = "critique"  # data: {round, flagged: {proposal_id: [issue]}}
+    REPORT_READY = "report_ready"  # data: {kind, ok}; the report is read from the snapshot
+    GAP_READY = "gap_ready"  # data: {score, keyword_coverage}; the report via the snapshot
+    PROPOSALS_READY = "proposals_ready"  # data: {round, proposal_ids}; text via the snapshot
+    CRITIQUE = "critique"  # data: {round, flagged_ids, final}
     REVIEW_REQUIRED = "review_required"  # data: {proposal_ids}
     RUN_COMPLETED = "run_completed"  # data: {status: SessionStatus}
-    RUN_FAILED = "run_failed"  # data: {error}
+    # data: {error}: budget_exceeded | model_error | invalid_model_output | internal_error
+    RUN_FAILED = "run_failed"
 
 
 class Event(BaseModel):

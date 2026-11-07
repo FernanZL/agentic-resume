@@ -17,7 +17,7 @@ dependencies = [
     "psycopg-pool>=3.2.0",
     "psycopg[binary]>=3.2.0",
     "pydantic>=2.10.0",
-    "pymupdf4llm>=0.0.17",
+    "pymupdf>=1.25.0",
     "python-docx>=1.1.0",
     "python-multipart>=0.0.20",
     "sqlalchemy[asyncio]>=2.0.36",
@@ -45,10 +45,11 @@ max-complexity = 10
 
 [tool.ruff.lint.per-file-ignores]
 "*/tests/*" = ["S101", "S105", "S106"]
+"evals/test_*.py" = ["S101"]
 "conftest.py" = ["S101"]
 
 [tool.pytest.ini_options]
-testpaths = ["agent", "backend"]
+testpaths = ["agent", "backend", "evals"]
 pythonpath = ["."]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"

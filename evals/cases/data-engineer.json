@@ -1,0 +1,10 @@
+{
+  "name": "data-engineer",
+  "resume": "Priya Nandakumar\npriya.n@example.com | Toronto\n\nSummary\nData engineer with 4 years of experience building batch pipelines.\n\nExperience\nData Engineer, Northwind Logistics (Jan 2022 - Present)\n- Built daily ETL jobs in Python and Airflow moving shipment data into Snowflake\n- Reduced pipeline failures by rewriting brittle SQL transformations\n- Worked with analysts on dashboards\n\nJunior Data Analyst, Maple Retail (Jun 2020 - Dec 2021)\n- Wrote SQL reports for 6 regional managers\n- Automated weekly Excel reports with Python\n\nEducation\nBSc Computer Science, University of Waterloo (2020)\n\nSkills\nPython, SQL, Airflow, Snowflake, Excel, Git",
+  "linkedin": "Headline: Data Engineer at Northwind\nAbout: I like data.\nExperience: Data Engineer, Northwind Logistics (2022 - Present)",
+  "target": {
+    "title": "Senior Data Engineer",
+    "company": "Fictional Streams Inc",
+    "job_text": "Senior Data Engineer. You will design streaming and batch pipelines with Kafka, Spark and dbt on AWS, own data quality and observability, mentor engineers, and partner with ML teams. Must have: Python, SQL, Spark, Kafka, data modeling, Airflow or Dagster. Nice to have: dbt, Terraform, Kubernetes."
+  }
+}

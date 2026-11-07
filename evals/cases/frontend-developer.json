@@ -1,0 +1,11 @@
+{
+  "name": "frontend-developer",
+  "resume": "Lena Hoffmann\nlena.hoffmann@example.com | Berlin\n\nSummary\nFrontend developer focused on accessible web apps.\n\nExperience\nFrontend Developer, Kiezware GmbH (2020 - Present)\n- Built a component library in React and TypeScript used by 3 product teams\n- Migrated the checkout from jQuery to React\n- Improved Lighthouse accessibility score of the main app\n\nWeb Developer (freelance) (2018 - 2020)\n- Delivered marketing sites for small businesses with HTML, CSS and JavaScript\n\nSkills\nReact, TypeScript, CSS, Storybook, Jest, accessibility",
+  "linkedin": "Headline: Frontend Developer\nAbout: Building things for the web in Berlin.",
+  "target": {
+    "title": "Senior Frontend Engineer",
+    "company": "",
+    "job_url": "",
+    "job_text": "Senior Frontend Engineer. Lead the architecture of our React/TypeScript web platform, own performance and accessibility (WCAG 2.2), build a design system with Storybook, set up testing with Playwright and Vitest, and mentor mid-level engineers. Must have: React, TypeScript, performance optimization, accessibility, testing. Nice to have: Next.js, GraphQL."
+  }
+}

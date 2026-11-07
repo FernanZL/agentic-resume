@@ -1,0 +1,1 @@
+Audit the candidate's LinkedIn profile against their resume and the target role. Find what weakens it for this target: a vague headline, an About section that doesn't state value, experience on the resume that is missing from LinkedIn, and dates or titles that disagree between the two. Be specific and brief. Don't rewrite anything; writers do that.

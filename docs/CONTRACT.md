@@ -39,6 +39,8 @@ data: {"id":42,"session_id":"…","run_id":"…","type":"node_started","node":"j
 ```
 A `: ping` comment is sent every 15 s.
 
+Events carry no document text: `report_ready` is `{kind, ok}`, `gap_ready` is `{score, keyword_coverage}`, `proposals_ready` is `{round, proposal_ids}` and `critique` is `{round, flagged_ids, final}`. When one arrives, re-fetch the snapshot (debounced) to get the content. Only the chat (`token`, `message`) streams text. `run_failed` carries a code (`budget_exceeded`, `model_error`, `invalid_model_output` or `internal_error`), never an exception message.
+
 Event types are listed in `EventType` in `backend/schemas.py`. These are the `node` values in pipeline order:
 
 `concierge` → `intake` → `job_analyst` · `company_researcher` · `market_analyst` · `linkedin_auditor` (these four run in parallel) → `gap_analysis` → `resume_writer` · `linkedin_writer` (parallel) → `critic` (the writers and critic repeat at most 2 more rounds) → `review` (pauses and emits `review_required`) → `finalize` → `concierge`.
