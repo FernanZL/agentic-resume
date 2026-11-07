@@ -333,7 +333,8 @@ async def test_reviewed_documents_export_as_print_html_and_json(client, services
 
     page = await client.get(f"/api/sessions/{session_id}/export?format=html")
     assert page.headers["content-security-policy"].startswith("default-src 'none'")
-    assert "<script>" not in page.text and "&lt;script&gt;" in page.text
+    assert "<script>" not in page.text
+    assert "&lt;script&gt;" in page.text
     final = (await client.get(f"/api/sessions/{session_id}/export?format=json")).json()
     assert final["resume"]["summary"].endswith("Payments engineer")
     assert final["resume"]["name"] == "Alex Rivera"

@@ -178,6 +178,65 @@ async def test_fetch_text_manual_redirects_revalidates_each_hop_and_caps_at_5(
 
 
 @pytest.mark.asyncio
+async def test_fetch_text_pins_resolved_ip_host_header_and_sni_across_redirects(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """fetch_text pins each hop's URL to the validated IP (IPv6 in brackets) with Host and SNI."""
+    dns_map: dict[str, list[tuple[int, str]]] = {
+        "jobs.example.com": [(socket.AF_INET, "93.184.216.34")],
+        "ipv6.example.com": [(socket.AF_INET6, "2606:2800:220:1:248:1893:25c8:1946")],
+    }
+
+    def custom_getaddrinfo(
+        host: str, port: object, *args: object, **kwargs: object
+    ) -> list[tuple[int, int, int, str, tuple[str, int]]]:
+        entries = dns_map.get(host, [(socket.AF_INET, "93.184.216.34")])
+        return [(family, socket.SOCK_STREAM, 6, "", (ip, 0)) for family, ip in entries]
+
+    monkeypatch.setattr(socket, "getaddrinfo", custom_getaddrinfo)
+    observed: list[tuple[str, str, str, str]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        observed.append(
+            (
+                str(request.url),
+                request.url.host,
+                request.headers.get("host", ""),
+                str(request.extensions.get("sni_hostname", "")),
+            )
+        )
+        if request.url.path == "/start":
+            return httpx.Response(
+                302, headers={"Location": "https://ipv6.example.com:8443/final?x=1"}
+            )
+        body = (
+            "<html><head><title>Pinned IPv6 Job</title></head>"
+            "<body><p>Principal Distributed Systems role.</p></body></html>"
+        )
+        return httpx.Response(200, text=body, headers={"content-type": "text/html"})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        res = await fetch_text("https://jobs.example.com/start", client)
+
+    assert res.ok is True
+    assert res.url == "https://ipv6.example.com:8443/final?x=1"
+    assert observed == [
+        (
+            "https://93.184.216.34/start",
+            "93.184.216.34",
+            "jobs.example.com",
+            "jobs.example.com",
+        ),
+        (
+            "https://[2606:2800:220:1:248:1893:25c8:1946]:8443/final?x=1",
+            "2606:2800:220:1:248:1893:25c8:1946",
+            "ipv6.example.com:8443",
+            "ipv6.example.com",
+        ),
+    ]
+
+
+@pytest.mark.asyncio
 async def test_fetch_text_streams_up_to_max_bytes_and_skips_non_text(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

@@ -5,7 +5,7 @@ import html
 import ipaddress
 import re
 import socket
-from urllib.parse import urljoin, urlsplit
+from urllib.parse import urljoin, urlsplit, urlunsplit
 
 import httpx
 import trafilatura
@@ -58,6 +58,15 @@ class FetchResult(BaseModel):
     error: str = ""
 
 
+class _PinnedTarget(BaseModel):
+    """Validated request target with IP-pinned URL, Host header, and SNI hostname."""
+
+    original_url: str
+    pinned_url: str
+    host_header: str
+    sni_hostname: str
+
+
 def _is_forbidden_ip(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
     """Return True if an IPv4 or IPv6 address (including IPv4-mapped) is non-public."""
     if (
@@ -92,8 +101,8 @@ def _is_auth_wall_url(url: str) -> bool:
     return "/authwall" in path_lower or "/login" in path_lower
 
 
-async def _validate_resolved_host(host: str) -> str | None:
-    """Validate an IP literal or resolve a hostname and ensure all IPs are public."""
+async def _validate_resolved_host(host: str) -> tuple[str | None, str | None]:
+    """Validate an IP literal or resolve a hostname and return (validated_ip, error)."""
     try:
         literal_ip = ipaddress.ip_address(host.split("%")[0])
     except ValueError:
@@ -101,40 +110,74 @@ async def _validate_resolved_host(host: str) -> str | None:
 
     if literal_ip is not None:
         if _is_forbidden_ip(literal_ip):
-            return "Refusing to fetch private, loopback, or internal network addresses."
-        return None
+            return None, "Refusing to fetch private, loopback, or internal network addresses."
+        return str(literal_ip), None
 
     try:
         resolved = await asyncio.to_thread(_resolve_host_ips, host)
     except OSError as exc:
-        return f"Could not resolve hostname '{host}': {exc}"
+        return None, f"Could not resolve hostname '{host}': {exc}"
 
     if not resolved:
-        return f"Could not resolve hostname '{host}'."
+        return None, f"Could not resolve hostname '{host}'."
 
+    validated_ips: list[str] = []
     for raw_ip in resolved:
         try:
             ip = ipaddress.ip_address(raw_ip.split("%")[0])
         except ValueError:
-            return f"Invalid IP address resolved for '{host}'."
+            return None, f"Invalid IP address resolved for '{host}'."
         if _is_forbidden_ip(ip):
-            return "Refusing to fetch host resolving to a private, loopback, or reserved IP."
-    return None
+            return None, "Refusing to fetch host resolving to a private, loopback, or reserved IP."
+        validated_ips.append(str(ip))
+
+    return validated_ips[0], None
 
 
-async def _check_url_safety(url: str) -> str | None:
-    """Validate scheme, known auth walls, and resolved host IPs; return error or None."""
-    parts = urlsplit(url.strip())
+def _format_host_port(host: str, port: int | None) -> str:
+    """Format a hostname or IP (with brackets for IPv6) and optional port."""
+    bracketed = f"[{host}]" if ":" in host and not host.startswith("[") else host
+    return f"{bracketed}:{port}" if port is not None else bracketed
+
+
+async def _resolve_pinned_target(url: str) -> tuple[_PinnedTarget | None, str | None]:
+    """Validate URL scheme/host/IPs and return a DNS-pinned target or an error message."""
+    cleaned_url = url.strip()
+    parts = urlsplit(cleaned_url)
     if parts.scheme not in ("http", "https") or not parts.hostname:
-        return "Only http and https URLs with a valid hostname are allowed."
-    if _is_auth_wall_url(url):
-        return "This site is behind an authentication wall; please paste the posting text directly."
+        return None, "Only http and https URLs with a valid hostname are allowed."
+    if _is_auth_wall_url(cleaned_url):
+        return (
+            None,
+            "This site is behind an authentication wall; please paste the posting text directly.",
+        )
+
+    try:
+        port = parts.port
+    except ValueError:
+        return None, "Invalid port in URL."
 
     host = parts.hostname.strip("[]").lower()
     if not host or host == "localhost" or host.endswith((".localhost", ".local", ".internal")):
-        return "Refusing to fetch private, loopback, or internal network addresses."
+        return None, "Refusing to fetch private, loopback, or internal network addresses."
 
-    return await _validate_resolved_host(host)
+    validated_ip, safety_error = await _validate_resolved_host(host)
+    if safety_error or not validated_ip:
+        return None, safety_error or f"Could not validate host '{host}'."
+
+    pinned_netloc = _format_host_port(validated_ip, port)
+    pinned_url = urlunsplit((parts.scheme, pinned_netloc, parts.path, parts.query, parts.fragment))
+    host_header = _format_host_port(host, port)
+
+    return (
+        _PinnedTarget(
+            original_url=cleaned_url,
+            pinned_url=pinned_url,
+            host_header=host_header,
+            sni_hostname=host,
+        ),
+        None,
+    )
 
 
 def _is_supported_content_type(content_type_header: str) -> bool:
@@ -189,16 +232,17 @@ def _evaluate_response_text(url: str, final_url: str, raw_html: str, max_chars: 
 
 
 async def _stream_once(
-    origin_url: str, current_url: str, client: httpx.AsyncClient, max_chars: int
+    origin_url: str, target: _PinnedTarget, client: httpx.AsyncClient, max_chars: int
 ) -> tuple[str | None, FetchResult | None]:
-    """Stream one GET request; return (redirect_location, None) or (None, FetchResult)."""
+    """Stream one GET request pinned to the validated IP; return redirect URL or FetchResult."""
     try:
         async with client.stream(
             "GET",
-            current_url,
+            target.pinned_url,
             timeout=15.0,
             follow_redirects=False,
-            headers={"User-Agent": _USER_AGENT},
+            headers={"User-Agent": _USER_AGENT, "Host": target.host_header},
+            extensions={"sni_hostname": target.sni_hostname},
         ) as resp:
             if resp.status_code in _REDIRECT_STATUSES:
                 location = resp.headers.get("location", "").strip()
@@ -206,7 +250,7 @@ async def _stream_once(
                     return None, FetchResult(
                         url=origin_url, ok=False, error="Redirect response missing Location header."
                     )
-                return urljoin(current_url, location), None
+                return urljoin(target.original_url, location), None
 
             if resp.status_code in (401, 403, 999):
                 msg = "Page requires sign-in (auth wall); please paste the posting text directly."
@@ -230,19 +274,19 @@ async def _stream_once(
             url=origin_url, ok=False, error=f"Network error while fetching URL: {exc}"
         )
 
-    return None, _evaluate_response_text(origin_url, current_url, raw_html, max_chars)
+    return None, _evaluate_response_text(origin_url, target.original_url, raw_html, max_chars)
 
 
 async def fetch_text(url: str, client: httpx.AsyncClient, max_chars: int = 20_000) -> FetchResult:
-    """Fetch a public URL, manually validating <= 5 redirects and streaming <= 2 MB."""
+    """Fetch a public URL pinned to its validated IP across <= 5 redirects and <= 2 MB."""
     current_url = url.strip()
 
     for redirect_count in range(MAX_REDIRECTS + 1):
-        safety_error = await _check_url_safety(current_url)
-        if safety_error:
-            return FetchResult(url=url, ok=False, error=safety_error)
+        target, safety_error = await _resolve_pinned_target(current_url)
+        if safety_error or target is None:
+            return FetchResult(url=url, ok=False, error=safety_error or "Invalid URL.")
 
-        next_url, result = await _stream_once(url, current_url, client, max_chars)
+        next_url, result = await _stream_once(url, target, client, max_chars)
         if result is not None:
             return result
         if redirect_count >= MAX_REDIRECTS or next_url is None:
