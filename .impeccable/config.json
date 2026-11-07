@@ -56,6 +56,15 @@
         ],
         "createdAt": "2026-11-07T18:54:49.546Z",
         "reason": "Claude: the catalog world's small-caps apparatus grammar, shown as dealt (throwaway sketch)"
+      },
+      {
+        "rule": "design-system-font",
+        "value": "*",
+        "files": [
+          ".impeccable/mocks/decision/*.html"
+        ],
+        "createdAt": "2026-11-07T19:33:36.281Z",
+        "reason": "Claude: archived decision-round sketches of the unchosen directions (and the pre-DESIGN.md sketch of the chosen one); their fonts are intentionally not the shipped system"
       }
     ]
   }
