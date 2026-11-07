@@ -1,0 +1,60 @@
+[project]
+name = "agentic-resume"
+version = "0.1.0"
+description = "Multi-agent resume and LinkedIn optimizer (LangGraph + FastAPI)"
+requires-python = ">=3.12"
+dependencies = [
+    "aiosqlite>=0.21.0",
+    "fastapi>=0.115.0",
+    "httpx>=0.28.1",
+    "langchain>=1.0.0",
+    "langchain-core>=1.0.0",
+    "langchain-openai>=1.0.0",
+    "langchain-tavily>=0.2.0",
+    "langfuse>=3.0.0",
+    "langgraph>=1.0.0",
+    "langgraph-checkpoint-postgres>=3.0.0",
+    "psycopg-pool>=3.2.0",
+    "psycopg[binary]>=3.2.0",
+    "pydantic>=2.10.0",
+    "pymupdf4llm>=0.0.17",
+    "python-docx>=1.1.0",
+    "python-multipart>=0.0.20",
+    "sqlalchemy[asyncio]>=2.0.36",
+    "trafilatura>=2.0.0",
+    "uvicorn[standard]>=0.32.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3.0",
+    "pytest-asyncio>=0.25.0",
+    "pytest-cov>=6.0.0",
+    "ruff>=0.9.0",
+]
+
+[tool.ruff]
+line-length = 100
+include = ["backend/**/*.py", "agent/**/*.py", "evals/**/*.py", "conftest.py"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "SIM", "UP", "S", "PT", "C90", "ASYNC"]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10
+
+[tool.ruff.lint.per-file-ignores]
+"*/tests/*" = ["S101", "S105", "S106"]
+"conftest.py" = ["S101"]
+
+[tool.pytest.ini_options]
+testpaths = ["agent", "backend"]
+pythonpath = ["."]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+addopts = "--import-mode=importlib"
+markers = ["postgres: needs a real Postgres in DATABASE_URL (docker compose up db)"]
+
+[tool.coverage.run]
+source = ["backend", "agent"]
+omit = ["*/tests/*"]
