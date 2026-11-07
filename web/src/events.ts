@@ -69,9 +69,11 @@ export function connectSessionEvents(
             }
             return next;
           });
-          handlers.onEvent(ev);
+          // A live mock run is stamped as it arrives so the score plays in real time;
+          // the finished demo keeps its scripted, realistic timing.
+          handlers.onEvent(sessionId === "demo" ? ev : { ...ev, at: new Date().toISOString() });
         },
-        (idx + 1) * 90,
+        (idx + 1) * (sessionId === "demo" ? 40 : 450),
       );
       timers.push(timer);
     });

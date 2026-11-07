@@ -33,6 +33,10 @@ flowchart LR
 - **Writers and critic**: an evaluator-optimizer loop. Numbers are checked against your documents in code, and anything else is judged by a model. Flagged proposals go back to their writer for at most two rewrites. Unverifiable numbers end up as `[X]` placeholders for you to fill in. Nothing is invented silently.
 - **Review**: `interrupt()` inside the subgraph. The run is checkpointed in Postgres and resumes with your decisions, even after a restart.
 
+## The interface
+
+The live run is drawn as an orchestral score: one staff per agent on a shared time axis. Work is beams, tool calls are noteheads, the critic's rewrite rounds sit inside repeat barlines, and the review is a fermata, where the run waits for you. Vermilion only ever means "now". The design system is in `DESIGN.md`.
+
 ## What it shows
 
 | | |

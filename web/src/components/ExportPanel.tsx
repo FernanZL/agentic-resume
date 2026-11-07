@@ -21,6 +21,8 @@ export interface ExportPanelProps {
   onApiError: (err: unknown) => void;
 }
 
+const LINKEDIN_NAMES: Record<string, string> = { headline: "Headline", about: "About" };
+
 export function ExportPanel({ snapshot, onApiError }: ExportPanelProps) {
   const [downloading, setDownloading] = useState<"docx" | "md" | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -104,138 +106,127 @@ export function ExportPanel({ snapshot, onApiError }: ExportPanelProps) {
     : "";
 
   return (
-    <div className="export-stack">
-      <section className="panel no-print" aria-label="Export controls">
-        <div className="panel-header">
-          <div>
-            <h2>Export Artifacts &amp; LinkedIn Copy</h2>
-            <p className="panel-subcopy">
-              {isReviewed
-                ? "Your approved and edited proposals are compiled below. Download DOCX/Markdown or open the print-ready HTML page to Save as PDF."
-                : "Exports are disabled until you submit your proposal review decisions in the Review Proposals tab (proposals with no decision count as rejected)."}
-            </p>
-          </div>
-
-          <div className="export-actions">
-            <button
-              type="button"
-              className="btn btn-primary"
-              disabled={!isReviewed || downloading !== null}
-              onClick={() => void handleDownload("docx")}
-            >
-              <IconDownload width={15} height={15} />
-              <span>{downloading === "docx" ? "Generating DOCX..." : "Download DOCX"}</span>
-            </button>
-
-            <button
-              type="button"
-              className="btn btn-secondary"
-              disabled={!isReviewed || downloading !== null}
-              onClick={() => void handleDownload("md")}
-            >
-              <IconDownload width={15} height={15} />
-              <span>{downloading === "md" ? "Generating MD..." : "Download Markdown"}</span>
-            </button>
-
-            <button
-              type="button"
-              className="btn btn-secondary"
-              disabled={!isReviewed}
-              onClick={handleOpenPrintHtml}
-            >
-              <IconPrint width={15} height={15} />
-              <span>Save as PDF (Print View)</span>
-            </button>
-          </div>
+    <section className="export" aria-labelledby="export-title">
+      <header className="export-head no-print">
+        <div>
+          <h2 id="export-title">Export Artifacts &amp; LinkedIn Copy</h2>
+          <p>
+            {isReviewed
+              ? "Built from the proposals you accepted or edited. Everything else stays as you wrote it."
+              : "Exports open once you submit your review. Proposals left without a decision count as rejected."}
+          </p>
         </div>
+        <div className="export-actions">
+          <button
+            type="button"
+            className="btn btn-primary"
+            disabled={!isReviewed || downloading !== null}
+            onClick={() => void handleDownload("docx")}
+          >
+            <IconDownload width={15} height={15} aria-hidden="true" />
+            {downloading === "docx" ? "Preparing DOCX…" : "Download DOCX"}
+          </button>
+          <button
+            type="button"
+            className="btn"
+            disabled={!isReviewed || downloading !== null}
+            onClick={() => void handleDownload("md")}
+          >
+            <IconDownload width={15} height={15} aria-hidden="true" />
+            {downloading === "md" ? "Preparing Markdown…" : "Download Markdown"}
+          </button>
+          <button
+            type="button"
+            className="btn"
+            disabled={!isReviewed}
+            onClick={handleOpenPrintHtml}
+          >
+            <IconPrint width={15} height={15} aria-hidden="true" />
+            Save as PDF (Print View)
+          </button>
+        </div>
+      </header>
 
-        {!isReviewed ? (
-          <div className="critic-issues-box" role="status">
-            <IconAlert width={16} height={16} />
-            <span>
-              Complete and submit your review in <strong>2. Review Proposals</strong> to unlock
-              DOCX, Markdown, print-ready HTML/PDF export, and LinkedIn copy blocks. Proposals left
-              without a decision count as rejected.
-            </span>
-          </div>
-        ) : loadingExport && !exportData ? (
-          <p className="panel-subcopy">Loading reviewed export preview...</p>
-        ) : linkedinEntries.length > 0 ? (
-          <div className="linkedin-blocks">
-            <h3>LinkedIn Copy Blocks</h3>
-            <div className="linkedin-cards-grid">
-              {linkedinEntries.map(([target, finalCopy]) => {
-                const copyKey = `linkedin:${target}`;
-                const isCopied = copiedId === copyKey;
-                return (
-                  <article key={copyKey} className="linkedin-copy-card">
-                    <div className="linkedin-copy-header">
-                      <strong>LinkedIn — {target.toUpperCase()}</strong>
-                      <button
-                        type="button"
-                        className="btn btn-small btn-secondary"
-                        disabled={!isReviewed}
-                        onClick={() => void handleCopy(copyKey, finalCopy)}
-                      >
-                        {isCopied ? (
-                          <IconCheck width={14} height={14} />
-                        ) : (
-                          <IconCopy width={14} height={14} />
-                        )}
-                        <span>{isCopied ? "Copied" : "Copy Text"}</span>
-                      </button>
-                    </div>
-                    <pre className="linkedin-copy-pre">{finalCopy}</pre>
-                  </article>
-                );
-              })}
-            </div>
-          </div>
-        ) : null}
-      </section>
+      {!isReviewed ? (
+        <p className="export-locked" role="status">
+          <IconAlert width={16} height={16} aria-hidden="true" />
+          Submit your review first. Proposals left without a decision count as rejected.
+        </p>
+      ) : loadingExport && !exportData ? (
+        <p className="loading">Preparing your reviewed documents…</p>
+      ) : null}
+
+      {isReviewed && linkedinEntries.length > 0 ? (
+        <section className="linkedin no-print" aria-labelledby="linkedin-title">
+          <h3 id="linkedin-title">LinkedIn copy</h3>
+          <ul className="linkedin-list">
+            {linkedinEntries.map(([target, finalCopy]) => {
+              const copyKey = `linkedin:${target}`;
+              const isCopied = copiedId === copyKey;
+              return (
+                <li key={copyKey} className="linkedin-item">
+                  <div className="linkedin-item-head">
+                    <strong>{LINKEDIN_NAMES[target] ?? `Experience (${target})`}</strong>
+                    <button
+                      type="button"
+                      className="btn btn-small"
+                      onClick={() => void handleCopy(copyKey, finalCopy)}
+                    >
+                      {isCopied ? (
+                        <IconCheck width={14} height={14} aria-hidden="true" />
+                      ) : (
+                        <IconCopy width={14} height={14} aria-hidden="true" />
+                      )}
+                      {isCopied ? "Copied" : "Copy"}
+                    </button>
+                  </div>
+                  <p className="linkedin-text">{finalCopy}</p>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      ) : null}
 
       {isReviewed && resumeProfile ? (
-        <section className="print-resume-sheet" aria-label="ATS-safe single-column print preview">
-          <div className="print-sheet-banner no-print">
-            <span>ATS-Safe Single-Column Resume Preview (from /export?format=json)</span>
+        <section className="sheet-wrap" aria-label="Your reviewed resume">
+          <div className="sheet-bar no-print">
+            <span>Your reviewed resume, single column and ATS-safe</span>
             <button
               type="button"
-              className="btn btn-small btn-secondary"
+              className="btn btn-small"
               onClick={() => void handleCopy("full-md", markdownPreview)}
             >
               {copiedId === "full-md" ? (
-                <IconCheck width={14} height={14} />
+                <IconCheck width={14} height={14} aria-hidden="true" />
               ) : (
-                <IconCopy width={14} height={14} />
+                <IconCopy width={14} height={14} aria-hidden="true" />
               )}
-              <span>{copiedId === "full-md" ? "Copied Markdown" : "Copy Markdown"}</span>
+              {copiedId === "full-md" ? "Copied Markdown" : "Copy Markdown"}
             </button>
           </div>
-
-          <div className="ats-document">
-            <header className="ats-doc-header">
+          <article className="sheet">
+            <header>
               <h1>{resumeProfile.name}</h1>
-              <p className="ats-doc-headline">{snapshot.target.title || resumeProfile.headline}</p>
-              <p className="ats-doc-contact">{resumeProfile.contact.join(" · ")}</p>
+              {resumeProfile.headline ? (
+                <p className="sheet-headline">{resumeProfile.headline}</p>
+              ) : null}
+              <p className="sheet-contact">{resumeProfile.contact.join(" · ")}</p>
             </header>
-
-            <section className="ats-doc-section">
-              <h2>Professional Summary</h2>
-              <p>{resumeProfile.summary}</p>
-            </section>
-
-            <section className="ats-doc-section">
+            {resumeProfile.summary ? (
+              <section>
+                <h2>Summary</h2>
+                <p>{resumeProfile.summary}</p>
+              </section>
+            ) : null}
+            <section>
               <h2>Experience</h2>
               {resumeProfile.experience.map((exp) => (
-                <div key={exp.id} className="ats-exp-item">
-                  <div className="ats-exp-header">
-                    <strong>
-                      {exp.title} — {exp.organization}
-                    </strong>
-                    <span>
-                      {exp.location} | {exp.start} – {exp.end}
-                    </span>
-                  </div>
+                <div key={exp.id} className="sheet-role">
+                  <h3>
+                    {exp.title} — {[exp.organization, exp.location].filter(Boolean).join(", ")}
+                  </h3>
+                  <p className="sheet-dates">{[exp.start, exp.end].filter(Boolean).join(" – ")}</p>
                   <ul>
                     {exp.bullets.map((b) => (
                       <li key={b.id}>{b.text}</li>
@@ -244,24 +235,27 @@ export function ExportPanel({ snapshot, onApiError }: ExportPanelProps) {
                 </div>
               ))}
             </section>
-
-            <section className="ats-doc-section">
-              <h2>Education</h2>
-              {resumeProfile.education.map((edu, idx) => (
-                <p key={idx}>
-                  <strong>{edu.degree}</strong>, {edu.institution} ({edu.year})
-                  {edu.details ? ` — ${edu.details}` : ""}
-                </p>
-              ))}
-            </section>
-
-            <section className="ats-doc-section">
-              <h2>Technical Skills</h2>
-              <p>{resumeProfile.skills.join(", ")}</p>
-            </section>
-          </div>
+            {resumeProfile.education.length ? (
+              <section>
+                <h2>Education</h2>
+                {resumeProfile.education.map((edu, idx) => (
+                  <p key={idx}>
+                    <strong>{edu.degree}</strong>, {edu.institution}
+                    {edu.year ? ` (${edu.year})` : ""}
+                    {edu.details ? ` — ${edu.details}` : ""}
+                  </p>
+                ))}
+              </section>
+            ) : null}
+            {resumeProfile.skills.length ? (
+              <section>
+                <h2>Skills</h2>
+                <p>{resumeProfile.skills.join(", ")}</p>
+              </section>
+            ) : null}
+          </article>
         </section>
       ) : null}
-    </div>
+    </section>
   );
 }

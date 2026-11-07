@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>The Galley Proof — Agentic Resume</title>
+<link href="https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@400;600;800&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap" rel="stylesheet">
+<style>
+:root{--paper:#fbfbfb;--ink:#1a1a1a;--red:#c8102e;--blue:#2f6db5;--rule:#d6d4cc}
+*{box-sizing:border-box;margin:0;padding:0}
+body{width:1440px;height:900px;overflow:hidden;background:#e3e5e8;color:var(--ink);font:14px/1.45 "Libre Franklin",system-ui,sans-serif}
+header{height:56px;background:var(--ink);color:#fff;display:flex;align-items:center;gap:28px;padding:0 24px}
+.mark{font-weight:800;font-size:17px}
+.role{font-weight:600}.role span{color:#d0cfc8;font-weight:400}
+nav{margin-left:auto;display:flex;gap:4px}
+nav a{color:#fff;text-decoration:none;font-weight:600;padding:8px 14px}
+nav a.on{background:var(--red)}
+main{display:grid;grid-template-columns:300px 1fr 280px;height:844px}
+.slug{background:var(--paper);border-right:1px solid var(--rule);padding:20px;display:flex;flex-direction:column;gap:2px}
+.slug h2,.desk h2{font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;margin-bottom:10px}
+.line{display:grid;grid-template-columns:44px 1fr auto;gap:8px;padding:9px 0;border-bottom:1px solid var(--rule);font-size:13px}
+.line .t{font-weight:600}.line .ok{color:#2c6e3f;font-weight:700}.line .back{color:var(--red);font-weight:700}
+.proof{padding:28px 40px;overflow:hidden}
+.sheet{background:#fff;box-shadow:0 1px 0 var(--rule),0 0 0 1px var(--rule);padding:40px 56px 40px 56px;position:relative;font-family:"Source Serif 4",Georgia,serif;font-size:15px;line-height:1.55;height:780px}
+.sheet h1{font-family:"Libre Franklin";font-size:26px;font-weight:800}
+.sheet .h3{font-family:"Libre Franklin";font-size:12px;letter-spacing:.08em;text-transform:uppercase;margin:22px 0 6px}
+.del{text-decoration:line-through;text-decoration-color:var(--red);text-decoration-thickness:2px}
+.ins{border-bottom:2px solid var(--red)}
+.tk{background:var(--red);color:#fff;font-family:"Libre Franklin";font-weight:800;font-size:11px;padding:1px 5px}
+.margin{position:absolute;right:-230px;width:200px;font-family:"Libre Franklin";font-size:12.5px;color:var(--blue);border-left:2px solid var(--blue);padding-left:10px}
+.margin b{display:block}
+.desk{background:var(--paper);border-left:1px solid var(--rule);padding:20px;display:flex;flex-direction:column;gap:14px}
+.score{font-size:56px;font-weight:800;line-height:1}
+.sign{display:grid;grid-template-columns:1fr 34px 34px 34px;gap:6px;align-items:center;font-size:13px;padding:6px 0;border-bottom:1px solid var(--rule)}
+.sign i{width:34px;height:28px;border:1.5px solid var(--ink);display:grid;place-items:center;font-style:normal;font-weight:800;font-size:12px}
+.sign i.on{background:var(--ink);color:#fff}
+button{margin-top:auto;background:var(--red);color:#fff;border:0;padding:14px;font:800 14px "Libre Franklin"}
+</style></head><body>
+<header><div class="mark">Agentic Resume</div><div class="role">Staff Distributed Systems Engineer <span>· VelaStream Cloud</span></div>
+<nav><a href="#">Run</a><a class="on" href="#">Proof 6</a><a href="#">Export</a></nav></header>
+<main>
+<section class="slug"><h2>Desk log</h2>
+<div class="line"><span class="t">0:09</span><span>Assistant briefed the desk</span><span class="ok">done</span></div>
+<div class="line"><span class="t">0:14</span><span>Intake read resume + LinkedIn</span><span class="ok">done</span></div>
+<div class="line"><span class="t">0:33</span><span>Job posting: 12 must-haves</span><span class="ok">filed</span></div>
+<div class="line"><span class="t">0:42</span><span>Company: VelaStream brief</span><span class="ok">filed</span></div>
+<div class="line"><span class="t">0:29</span><span>Market: staff platform roles</span><span class="ok">filed</span></div>
+<div class="line"><span class="t">0:18</span><span>LinkedIn audit: 3 gaps</span><span class="ok">filed</span></div>
+<div class="line"><span class="t">0:14</span><span>Gap: 72/100, 5 keywords missing</span><span class="ok">filed</span></div>
+<div class="line"><span class="t">0:31</span><span>Writers set 6 proofs</span><span class="ok">set</span></div>
+<div class="line"><span class="t">0:19</span><span>Critic sent 2 back (SLA claim)</span><span class="back">back</span></div>
+<div class="line"><span class="t">—</span><span>Waiting for your sign-off</span><span class="back">you</span></div>
+</section>
+<section class="proof"><div class="sheet">
+<h1>Elena Vance</h1><div>elena.vance@example.com · Lisbon · github.com/evance</div>
+<h2 class="h3">Summary</h2>
+<p><span class="del">Senior Backend Engineer with 7 years of experience building data pipelines.</span> <span class="ins">Distributed systems engineer with 7 years scaling event streaming and resilient APIs in Python and Go.</span></p>
+<div class="margin" style="top:150px"><b>Critic: OK</b>Every claim traced to your experience section.</div>
+<h2 class="h3">Experience · Staff Engineer, Northwind Data (2021–now)</h2>
+<p>Architected multi-region ingestion sustaining 45,000 events/sec with <span class="tk">TK</span>% p99 availability.</p>
+<div class="margin" style="top:250px;color:var(--red);border-color:var(--red)"><b>TK: your number</b>Your resume gives no availability figure; fill it in or cut it.</div>
+<p style="margin-top:10px">Led migration of 18 services to Kubernetes, cutting deploy time from hours to minutes.</p>
+<p style="margin-top:10px"><span class="del">Worked on monitoring.</span> <span class="ins">Introduced OpenTelemetry tracing across the ingestion path.</span></p>
+<div class="margin" style="top:350px"><b>Critic: sent back once</b>First draft claimed a 99.99% SLA not in your documents.</div>
+<h2 class="h3">Skills</h2><p>Go, Python, Kafka, PostgreSQL, Kubernetes, gRPC, OpenTelemetry</p>
+</div></section>
+<aside class="desk"><h2>Sign-off</h2>
+<div><div class="score">72</div><div style="font-weight:600">match / 100 · 58% keywords</div></div>
+<div class="sign"><span>Summary</span><i class="on">OK</i><i>Ed</i><i>No</i></div>
+<div class="sign"><span>Ingestion bullet</span><i>OK</i><i class="on">Ed</i><i>No</i></div>
+<div class="sign"><span>Migration bullet</span><i class="on">OK</i><i>Ed</i><i>No</i></div>
+<div class="sign"><span>Monitoring bullet</span><i>OK</i><i>Ed</i><i>No</i></div>
+<div class="sign"><span>LinkedIn headline</span><i>OK</i><i>Ed</i><i>No</i></div>
+<div class="sign"><span>LinkedIn about</span><i>OK</i><i>Ed</i><i>No</i></div>
+<button>Sign off 6 proofs</button>
+</aside>
+</main></body></html>

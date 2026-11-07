@@ -465,13 +465,18 @@ export function createDemoReviewMockSnapshot(sessionId = "demo"): SessionSnapsho
     decisions: {},
     reviewed: false,
     cost_usd: 0.0164,
-    last_event_id: 32,
+    last_event_id: 37,
   };
 }
 
+/** Demo timing: the scripted offsets (about 3.8 s) stretched to a realistic run of
+ * about two and a half minutes that ended just now. */
+const DEMO_TIME_SCALE = 42;
+const DEMO_LAST_OFFSET_MS = 3780;
+
 export function buildMockEventStream(sessionId: string): Event[] {
-  const now = Date.now();
-  const iso = (offsetMs: number) => new Date(now + offsetMs).toISOString();
+  const start = Date.now() - DEMO_LAST_OFFSET_MS * DEMO_TIME_SCALE;
+  const iso = (offsetMs: number) => new Date(start + offsetMs * DEMO_TIME_SCALE).toISOString();
 
   return [
     {
@@ -714,7 +719,7 @@ export function buildMockEventStream(sessionId: string): Event[] {
       run_id: MOCK_RUN_ID,
       type: "node_started",
       node: "critic",
-      data: { label: "Running numerical grounding & anti-fabrication audit (Round 1)" },
+      data: { label: "Checking every number and claim against your documents (round 1)" },
       at: iso(3250),
     },
     {
@@ -723,48 +728,89 @@ export function buildMockEventStream(sessionId: string): Event[] {
       run_id: MOCK_RUN_ID,
       type: "critique",
       node: "critic",
-      data: {
-        round: 1,
-        flagged_ids: ["resume:skills"],
-        final: true,
-      },
-      at: iso(3500),
+      data: { round: 1, flagged_ids: ["resume:exp0.b0", "resume:skills"], final: false },
+      at: iso(3400),
     },
     {
       id: 29,
       session_id: sessionId,
       run_id: MOCK_RUN_ID,
-      type: "proposals_ready",
+      type: "node_finished",
       node: "critic",
-      data: { round: 1, proposal_ids: MOCK_PROPOSALS.map((p) => p.id) },
-      at: iso(3600),
+      data: { label: "Sent 2 rewrites back to the resume writer", seconds: 0.9 },
+      at: iso(3420),
     },
     {
       id: 30,
       session_id: sessionId,
       run_id: MOCK_RUN_ID,
-      type: "node_finished",
-      node: "critic",
-      data: { label: "5 proposals verified OK, 1 flagged for review", seconds: 1.2 },
-      at: iso(3650),
+      type: "node_started",
+      node: "resume_writer",
+      data: { label: "Rewriting the 2 flagged proposals" },
+      at: iso(3450),
     },
     {
       id: 31,
       session_id: sessionId,
       run_id: MOCK_RUN_ID,
-      type: "node_started",
-      node: "review",
-      data: { label: "Awaiting human-in-the-loop review on 6 proposals" },
-      at: iso(3700),
+      type: "proposals_ready",
+      node: "resume_writer",
+      data: { round: 2, proposal_ids: ["resume:exp0.b0", "resume:skills"] },
+      at: iso(3560),
     },
     {
       id: 32,
       session_id: sessionId,
       run_id: MOCK_RUN_ID,
+      type: "node_finished",
+      node: "resume_writer",
+      data: { label: "Rewrote 2 proposals", seconds: 1.1 },
+      at: iso(3580),
+    },
+    {
+      id: 33,
+      session_id: sessionId,
+      run_id: MOCK_RUN_ID,
+      type: "node_started",
+      node: "critic",
+      data: { label: "Checking the rewrites (round 2)" },
+      at: iso(3600),
+    },
+    {
+      id: 34,
+      session_id: sessionId,
+      run_id: MOCK_RUN_ID,
+      type: "critique",
+      node: "critic",
+      data: { round: 2, flagged_ids: ["resume:skills"], final: true },
+      at: iso(3700),
+    },
+    {
+      id: 35,
+      session_id: sessionId,
+      run_id: MOCK_RUN_ID,
+      type: "node_finished",
+      node: "critic",
+      data: { label: "5 proposals verified OK, 1 flagged for review", seconds: 1.0 },
+      at: iso(3720),
+    },
+    {
+      id: 36,
+      session_id: sessionId,
+      run_id: MOCK_RUN_ID,
+      type: "node_started",
+      node: "review",
+      data: { label: "Awaiting human-in-the-loop review on 6 proposals" },
+      at: iso(3760),
+    },
+    {
+      id: 37,
+      session_id: sessionId,
+      run_id: MOCK_RUN_ID,
       type: "review_required",
       node: "review",
       data: { proposal_ids: MOCK_PROPOSALS.map((p) => p.id) },
-      at: iso(3750),
+      at: iso(3780),
     },
   ];
 }

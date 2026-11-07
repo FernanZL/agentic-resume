@@ -19,12 +19,24 @@ export interface StartScreenProps {
   onApiError: (err: unknown) => void;
 }
 
-const PIPELINE_STEPS = [
-  { stage: "Intake", detail: "Parse PDF/DOCX & screen safety" },
-  { stage: "Send × 4 Research", detail: "Job · Company · Market · LinkedIn" },
-  { stage: "ATS Gap Matrix", detail: "Deterministic TF-IDF + LLM rubric" },
-  { stage: "Writers ∥ Critic", detail: "Grounded diffs & metric audit" },
-  { stage: "Human Review", detail: "Approve, edit [X]%, export DOCX/PDF" },
+/** The parts of the run, drawn as a small static score (illustration, not live data). */
+const ENSEMBLE = [
+  { name: "Assistant", does: "talks with you, starts the team", at: 0, len: 8 },
+  {
+    name: "Researchers ×4",
+    does: "posting, company, market, LinkedIn, in parallel",
+    at: 10,
+    len: 34,
+  },
+  {
+    name: "Gap analysis",
+    does: "keywords counted in code, then a recruiter's rubric",
+    at: 46,
+    len: 10,
+  },
+  { name: "Writers", does: "resume and LinkedIn rewrites from your own facts", at: 58, len: 16 },
+  { name: "Critic", does: "checks every number, sends weak rewrites back", at: 66, len: 22 },
+  { name: "You", does: "accept, edit or reject each change", at: 90, len: 0 },
 ];
 
 export function StartScreen({ onSessionCreated, onOpenDemoSession, onApiError }: StartScreenProps) {
@@ -142,215 +154,197 @@ export function StartScreen({ onSessionCreated, onOpenDemoSession, onApiError }:
   };
 
   return (
-    <section className="start-shell" aria-label="Start optimization session">
-      <div className="start-masthead">
-        <div className="masthead-main">
-          <div className="masthead-copy">
-            <h1>Evidence-Bound Resume &amp; LinkedIn Optimization</h1>
-            <p>
-              Every claim is traced to your source documents. Four parallel LangGraph researchers
-              map the posting, company engineering stack, market rubric, and ATS keyword coverage
-              before the writers and anti-fabrication critic prepare section-by-section diffs for
-              your approval.
-            </p>
-          </div>
-
-          <div className="masthead-actions">
-            <button type="button" className="btn btn-primary" onClick={handleLoadSample}>
-              <IconSpark width={16} height={16} />
-              <span>Load Fictional Sample (Elena Vance)</span>
-            </button>
-            {isMockMode() ? (
-              <button type="button" className="btn btn-ghost" onClick={onOpenDemoSession}>
-                <span>Open Completed Demo (/s/demo)</span>
-              </button>
-            ) : null}
-          </div>
-        </div>
-
-        <ol className="masthead-pipeline" aria-label="Optimization pipeline architecture">
-          {PIPELINE_STEPS.map((item) => (
-            <li key={item.stage} className="masthead-step">
-              <strong>{item.stage}</strong>
-              <span>{item.detail}</span>
+    <section className="start" aria-labelledby="start-title">
+      <div className="start-intro">
+        <h1 id="start-title">Tailor your resume with a team of agents you can watch.</h1>
+        <p>
+          Give it your resume and the role. Researchers study the posting, the company and the
+          market in parallel, writers propose changes grounded in your own words, and a critic sends
+          back anything it can&apos;t verify. Nothing is exported until you decide on every change.
+        </p>
+        <ol className="ensemble" aria-label="The team">
+          {ENSEMBLE.map((part) => (
+            <li key={part.name} className="ensemble-part">
+              <span className="ensemble-name">{part.name}</span>
+              <span className="ensemble-line" aria-hidden="true">
+                {part.len ? (
+                  <span
+                    className="ensemble-beam"
+                    style={{ left: `${part.at}%`, width: `${part.len}%` }}
+                  />
+                ) : (
+                  <svg className="fermata" style={{ left: `${part.at}%` }} viewBox="0 0 32 18">
+                    <path
+                      d="M2 16 A14 14 0 0 1 30 16"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2.4"
+                    />
+                    <circle cx="16" cy="13" r="2.6" fill="currentColor" />
+                  </svg>
+                )}
+              </span>
+              <span className="ensemble-does">{part.does}</span>
             </li>
           ))}
         </ol>
+        <div className="row">
+          <button type="button" className="btn" onClick={handleLoadSample}>
+            <IconSpark width={16} height={16} aria-hidden="true" />
+            Try it with a fictional sample
+          </button>
+          {isMockMode() ? (
+            <button type="button" className="btn btn-quiet" onClick={onOpenDemoSession}>
+              Open the finished demo
+            </button>
+          ) : null}
+        </div>
       </div>
 
-      {localValidationError ? (
-        <div className="banner banner-error" role="alert">
-          <span>{localValidationError}</span>
-        </div>
-      ) : null}
+      <form className="start-form" onSubmit={handleSubmit} noValidate aria-label="New session">
+        {localValidationError ? (
+          <p className="form-error" role="alert">
+            {localValidationError}
+          </p>
+        ) : null}
 
-      <form className="start-grid" onSubmit={handleSubmit} noValidate>
-        <div className="panel start-column">
-          <div className="panel-header">
-            <h2>Candidate Documents</h2>
-            <span className="meta-tag">Required: Resume · Optional: LinkedIn</span>
-          </div>
-
-          <div className="field-block">
-            <div className="field-header-row">
-              <label htmlFor="resume-input" className="field-label">
-                Candidate Resume
-              </label>
-              <div className="segmented-tabs" role="tablist" aria-label="Resume input method">
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={resumeMode === "paste"}
-                  className={`seg-tab ${resumeMode === "paste" ? "active" : ""}`}
-                  onClick={() => setResumeMode("paste")}
-                >
-                  Paste Text
-                </button>
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={resumeMode === "upload"}
-                  className={`seg-tab ${resumeMode === "upload" ? "active" : ""}`}
-                  onClick={() => setResumeMode("upload")}
-                >
-                  Upload PDF / DOCX
-                </button>
-              </div>
+        <fieldset className="form-part">
+          <legend>Your documents</legend>
+          <div className="field-head">
+            <label htmlFor="resume-input">Resume</label>
+            <div className="switch" role="tablist" aria-label="Resume input method">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={resumeMode === "paste"}
+                onClick={() => setResumeMode("paste")}
+              >
+                Paste text
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={resumeMode === "upload"}
+                onClick={() => setResumeMode("upload")}
+              >
+                Upload a file
+              </button>
             </div>
-
-            {resumeMode === "paste" ? (
-              <textarea
-                id="resume-input"
-                className="input-textarea"
-                rows={10}
-                placeholder="Paste your full resume text (at least 50 characters)..."
-                value={resumeText}
-                onChange={(e) => {
-                  setResumeText(e.target.value);
-                  setResumeDoc(null);
-                }}
+          </div>
+          {resumeMode === "paste" ? (
+            <textarea
+              id="resume-input"
+              className="field"
+              rows={9}
+              placeholder="Paste your whole resume: at least 50 characters."
+              value={resumeText}
+              onChange={(e) => {
+                setResumeText(e.target.value);
+                setResumeDoc(null);
+              }}
+            />
+          ) : (
+            <div className="drop">
+              <IconDocument width={22} height={22} aria-hidden="true" />
+              <label htmlFor="resume-file-input">PDF, DOCX, TXT or Markdown, up to 2 MB</label>
+              <input
+                id="resume-file-input"
+                aria-label="Upload resume file"
+                type="file"
+                accept=".pdf,.docx,.txt,.md"
+                onChange={(e) => void handleFileUpload("resume", e)}
               />
-            ) : (
-              <div className="upload-dropzone">
-                <IconDocument width={24} height={24} />
-                <label htmlFor="resume-file-input" className="upload-label">
-                  Choose Resume File (.pdf, .docx, .txt, .md — max 2 MB)
-                </label>
-                <input
-                  id="resume-file-input"
-                  aria-label="Upload resume file"
-                  type="file"
-                  accept=".pdf,.docx,.txt,.md"
-                  onChange={(e) => void handleFileUpload("resume", e)}
-                />
-                {resumeBusy ? <span className="status-inline">Parsing file...</span> : null}
-              </div>
-            )}
-
-            {resumeDoc ? (
-              <div className="doc-preview-pill">
-                <IconCheck width={15} height={15} />
-                <span>
-                  Parsed resume ({resumeDoc.characters.toLocaleString()} chars):{" "}
-                  <code>{resumeDoc.preview.slice(0, 90)}…</code>
-                </span>
-              </div>
-            ) : null}
-          </div>
-
-          <div className="field-block">
-            <div className="field-header-row">
-              <label className="field-label">LinkedIn Profile Export (Optional)</label>
-              <div className="segmented-tabs" role="tablist" aria-label="LinkedIn input method">
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={linkedinMode === "none"}
-                  className={`seg-tab ${linkedinMode === "none" ? "active" : ""}`}
-                  onClick={() => {
-                    setLinkedinMode("none");
-                    setLinkedinDoc(null);
-                  }}
-                >
-                  Skip
-                </button>
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={linkedinMode === "paste"}
-                  className={`seg-tab ${linkedinMode === "paste" ? "active" : ""}`}
-                  onClick={() => setLinkedinMode("paste")}
-                >
-                  Paste Text
-                </button>
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={linkedinMode === "upload"}
-                  className={`seg-tab ${linkedinMode === "upload" ? "active" : ""}`}
-                  onClick={() => setLinkedinMode("upload")}
-                >
-                  Upload PDF
-                </button>
-              </div>
+              {resumeBusy ? <span className="drop-status">Reading the file…</span> : null}
             </div>
+          )}
+          {resumeDoc ? (
+            <p className="parsed">
+              <IconCheck width={15} height={15} aria-hidden="true" />
+              Read {resumeDoc.characters.toLocaleString()} characters, starting “
+              {resumeDoc.preview.slice(0, 70)}…”
+            </p>
+          ) : null}
 
-            {linkedinMode === "paste" ? (
-              <textarea
-                id="linkedin-input"
-                aria-label="LinkedIn profile text"
-                className="input-textarea"
-                rows={5}
-                placeholder="Paste your LinkedIn Headline, About, and Experience text..."
-                value={linkedinText}
-                onChange={(e) => {
-                  setLinkedinText(e.target.value);
+          <div className="field-head">
+            <span className="label" id="linkedin-label">
+              LinkedIn profile, optional
+            </span>
+            <div className="switch" role="tablist" aria-labelledby="linkedin-label">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={linkedinMode === "none"}
+                onClick={() => {
+                  setLinkedinMode("none");
                   setLinkedinDoc(null);
                 }}
-              />
-            ) : null}
-
-            {linkedinMode === "upload" ? (
-              <div className="upload-dropzone compact">
-                <label htmlFor="linkedin-file-input" className="upload-label">
-                  Upload LinkedIn &ldquo;Save to PDF&rdquo; export (.pdf, .docx, .txt)
-                </label>
-                <input
-                  id="linkedin-file-input"
-                  aria-label="Upload LinkedIn file"
-                  type="file"
-                  accept=".pdf,.docx,.txt,.md"
-                  onChange={(e) => void handleFileUpload("linkedin", e)}
-                />
-                {linkedinBusy ? (
-                  <span className="status-inline">Parsing LinkedIn PDF...</span>
-                ) : null}
-              </div>
-            ) : null}
-
-            {linkedinDoc ? (
-              <div className="doc-preview-pill">
-                <IconCheck width={15} height={15} />
-                <span>Parsed LinkedIn ({linkedinDoc.characters.toLocaleString()} chars)</span>
-              </div>
-            ) : null}
+              >
+                Skip
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={linkedinMode === "paste"}
+                onClick={() => setLinkedinMode("paste")}
+              >
+                Paste text
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={linkedinMode === "upload"}
+                onClick={() => setLinkedinMode("upload")}
+              >
+                Upload the PDF
+              </button>
+            </div>
           </div>
-        </div>
-
-        <div className="panel start-column">
-          <div className="panel-header">
-            <h2>Target Position</h2>
-            <span className="meta-tag">Title required · URL or Posting Text recommended</span>
-          </div>
-
-          <div className="field-row-2">
-            <div className="field-block">
-              <label htmlFor="target-title" className="field-label">
-                Target Job Title *
+          {linkedinMode === "paste" ? (
+            <textarea
+              id="linkedin-input"
+              aria-label="LinkedIn profile text"
+              className="field"
+              rows={5}
+              placeholder="Paste your headline, About and experience."
+              value={linkedinText}
+              onChange={(e) => {
+                setLinkedinText(e.target.value);
+                setLinkedinDoc(null);
+              }}
+            />
+          ) : null}
+          {linkedinMode === "upload" ? (
+            <div className="drop">
+              <label htmlFor="linkedin-file-input">
+                LinkedIn&apos;s “Save to PDF” export of your profile
               </label>
               <input
+                id="linkedin-file-input"
+                aria-label="Upload LinkedIn file"
+                type="file"
+                accept=".pdf,.docx,.txt,.md"
+                onChange={(e) => void handleFileUpload("linkedin", e)}
+              />
+              {linkedinBusy ? <span className="drop-status">Reading the PDF…</span> : null}
+            </div>
+          ) : null}
+          {linkedinDoc ? (
+            <p className="parsed">
+              <IconCheck width={15} height={15} aria-hidden="true" />
+              Read {linkedinDoc.characters.toLocaleString()} characters of your LinkedIn profile
+            </p>
+          ) : null}
+          <p className="hint">LinkedIn is never scraped: export your profile or paste it.</p>
+        </fieldset>
+
+        <fieldset className="form-part">
+          <legend>The role</legend>
+          <div className="field-pair">
+            <div>
+              <label htmlFor="target-title">Job title</label>
+              <input
                 id="target-title"
-                className="input-text"
+                className="field"
                 type="text"
                 required
                 placeholder="e.g. Staff Distributed Systems Engineer"
@@ -358,14 +352,11 @@ export function StartScreen({ onSessionCreated, onOpenDemoSession, onApiError }:
                 onChange={(e) => setTitle(e.target.value)}
               />
             </div>
-
-            <div className="field-block">
-              <label htmlFor="target-company" className="field-label">
-                Company Name
-              </label>
+            <div>
+              <label htmlFor="target-company">Company, optional</label>
               <input
                 id="target-company"
-                className="input-text"
+                className="field"
                 type="text"
                 placeholder="e.g. VelaStream Cloud"
                 value={company}
@@ -373,58 +364,46 @@ export function StartScreen({ onSessionCreated, onOpenDemoSession, onApiError }:
               />
             </div>
           </div>
+          <label htmlFor="target-url">Posting URL, optional</label>
+          <input
+            id="target-url"
+            className="field"
+            type="url"
+            placeholder="e.g. https://jobs.example.com/role"
+            value={jobUrl}
+            onChange={(e) => setJobUrl(e.target.value)}
+          />
+          <label htmlFor="target-jd-text">Posting text</label>
+          <textarea
+            id="target-jd-text"
+            className="field"
+            rows={6}
+            placeholder="Paste the posting if the link needs a sign-in. It makes the research much sharper."
+            value={jobText}
+            onChange={(e) => setJobText(e.target.value)}
+          />
+          <label htmlFor="target-notes">Anything else, optional</label>
+          <input
+            id="target-notes"
+            className="field"
+            type="text"
+            placeholder="e.g. level, region, what to emphasize"
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+          />
+        </fieldset>
 
-          <div className="field-block">
-            <label htmlFor="target-url" className="field-label">
-              Public Job Posting URL (Optional — paste text below if behind a sign-in wall)
-            </label>
-            <input
-              id="target-url"
-              className="input-text"
-              type="url"
-              placeholder="https://jobs.example.com/role"
-              value={jobUrl}
-              onChange={(e) => setJobUrl(e.target.value)}
-            />
-          </div>
-
-          <div className="field-block">
-            <label htmlFor="target-jd-text" className="field-label">
-              Job Posting Text
-            </label>
-            <textarea
-              id="target-jd-text"
-              className="input-textarea"
-              rows={8}
-              placeholder="Paste the job description, requirements, and responsibilities here..."
-              value={jobText}
-              onChange={(e) => setJobText(e.target.value)}
-            />
-          </div>
-
-          <div className="field-block">
-            <label htmlFor="target-notes" className="field-label">
-              Level, Region &amp; Focus Notes
-            </label>
-            <input
-              id="target-notes"
-              className="input-text"
-              type="text"
-              placeholder="e.g. Staff IC6, remote US, emphasize high-throughput Kafka & SLOs"
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-            />
-          </div>
-
-          <div className="start-actions">
-            <button
-              type="submit"
-              className="btn btn-primary btn-large"
-              disabled={submitting || resumeBusy || linkedinBusy}
-            >
-              {submitting ? "Launching Research Subagents..." : "Launch Optimization Session"}
-            </button>
-          </div>
+        <div className="form-submit">
+          <button
+            type="submit"
+            className="btn btn-primary btn-large"
+            disabled={submitting || resumeBusy || linkedinBusy}
+          >
+            {submitting ? "Starting the team…" : "Start the analysis"}
+          </button>
+          <p className="hint">
+            The run takes a few minutes. You can watch every agent while it plays.
+          </p>
         </div>
       </form>
     </section>

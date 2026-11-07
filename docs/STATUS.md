@@ -6,7 +6,7 @@
 | 1. Agent tools (`agent/tools/`) | argon | done, reviewed twice by sol (SSRF, DNS-rebinding pinning, size cap) |
 | 2. Graphs (concierge + analysis subgraph) | Claude | done, reviewed by sol, fixes applied |
 | 3. Backend (API, SSE, budget, persistence, exports) | Claude | done, reviewed by sol, fixes applied |
-| 4. Web SPA (`web/`, impeccable) | argon | done, reviewed twice by sol: PASS |
+| 4. Web SPA (`web/`) | argon, then a redesign by Claude | Rebuilt through the impeccable process: user-chosen direction "The Score", finish review disposition ship, documented in DESIGN.md |
 | 5. Docker, Render Blueprint, evals | Claude | done (evals moved from argon to Claude) |
 | 6. Connect real keys, run evals, deploy | user + Claude | **next** |
 

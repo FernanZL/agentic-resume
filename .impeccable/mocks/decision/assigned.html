@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>The Score — Agentic Resume</title>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;800&display=swap" rel="stylesheet">
+<style>
+:root{--blue:#23408e;--paper:#f6f7f5;--ink:#121212;--now:#e0482a;--line:rgba(18,18,18,.16)}
+*{box-sizing:border-box;margin:0;padding:0}
+body{width:1440px;height:900px;overflow:hidden;background:var(--paper);color:var(--ink);font:14px/1.45 "Hanken Grotesk",system-ui,sans-serif;font-variant-numeric:tabular-nums}
+header{height:60px;background:var(--blue);color:#fff;display:flex;align-items:center;padding:0 24px;gap:28px}
+.mark{font-weight:800;font-size:17px;letter-spacing:-.01em}
+.role{font-weight:600;font-size:15px}.role span{opacity:.75;font-weight:400}
+nav{display:flex;gap:4px;margin-left:auto}
+nav a{color:#fff;text-decoration:none;padding:8px 14px;font-weight:600;font-size:14px;border-bottom:3px solid transparent}
+nav a.on{border-color:#fff}
+.status{font-weight:600;font-size:13px;display:flex;align-items:center;gap:8px}
+.status i{width:8px;height:8px;border-radius:50%;background:var(--now);display:inline-block}
+main{display:grid;grid-template-columns:330px 1fr 300px;height:840px}
+.chat{border-right:1px solid var(--ink);padding:20px;display:flex;flex-direction:column;gap:14px}
+.chat h2,.note h2{font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase}
+.msg{font-size:14px}.msg b{display:block;font-size:12px;font-weight:800;margin-bottom:2px}
+.msg.you{padding-left:12px;border-left:3px solid var(--blue)}
+.chat .input{margin-top:auto;border:1.5px solid var(--ink);padding:12px;font-size:14px;color:#5c5d5c}
+.score{padding:20px 24px;position:relative;overflow:hidden}
+.axis{display:grid;grid-template-columns:150px 1fr 64px;font-size:12px;font-weight:600;margin-bottom:6px}
+.ticks{display:flex;justify-content:space-between}
+.staff{display:grid;grid-template-columns:150px 1fr 64px;align-items:center;height:62px}
+.name{font-weight:700;font-size:14px}.name small{display:block;font-weight:400;font-size:12px}
+.time{text-align:right;font-weight:600;font-size:13px}
+.lines{position:relative;height:40px;background:repeating-linear-gradient(to bottom,var(--line) 0 1px,transparent 1px 10px);border-left:2px solid var(--ink)}
+.beam{position:absolute;top:15px;height:10px;background:var(--ink)}
+.head{position:absolute;top:12px;width:16px;height:16px;border-radius:50%;background:var(--ink);transform:rotate(-20deg) scaleY(.75)}
+.lbl{position:absolute;top:-2px;font-size:11px;font-weight:600}
+.repeat{position:absolute;top:0;bottom:0;border-left:4px double var(--ink)}
+.repeat.end{border-left:none;border-right:4px double var(--ink)}
+.fermata{position:absolute;top:-30px;font-size:30px;line-height:1}
+.now{position:absolute;top:0;bottom:0;width:2px;background:var(--now)}
+.active .beam{background:var(--now)}
+.system{position:absolute;left:174px;top:44px;bottom:30px;width:3px;background:var(--ink)}
+.note{border-left:1px solid var(--ink);padding:20px;display:flex;flex-direction:column;gap:18px}
+.big{font-size:64px;font-weight:800;line-height:1;letter-spacing:-.03em}
+.big small{font-size:20px;font-weight:600}
+.kw{display:flex;flex-wrap:wrap;gap:6px}.kw span{border:1.5px solid var(--ink);padding:4px 10px;font-size:12px;font-weight:600}
+.kw span.miss{border-style:dashed}
+.rep a{display:flex;justify-content:space-between;color:var(--ink);text-decoration:none;font-weight:600;padding:8px 0;border-bottom:1px solid var(--line)}
+.wait{background:var(--blue);color:#fff;padding:14px;font-weight:600}
+.wait b{display:block;font-size:16px}
+</style></head><body>
+<header>
+  <div class="mark">Agentic Resume</div>
+  <div class="role">Staff Distributed Systems Engineer <span>· VelaStream Cloud</span></div>
+  <nav><a class="on" href="#">Score</a><a href="#">Review 6</a><a href="#">Export</a></nav>
+  <div class="status"><i></i>Running · 02:41</div>
+</header>
+<main>
+  <section class="chat">
+    <h2>Assistant</h2>
+    <div class="msg you"><b>You</b>Tailor my resume for the Staff Distributed Systems Engineer role at VelaStream Cloud.</div>
+    <div class="msg"><b>Assistant</b>Got it. I've sent four researchers out in parallel: the posting, VelaStream itself, the market for staff-level platform roles, and your LinkedIn. Watch them on the score; I'll call you when the rewrites are ready.</div>
+    <div class="msg"><b>Assistant</b>The critic sent two rewrites back: one claimed a 99.99% SLA your resume doesn't mention.</div>
+    <div class="input">Ask the assistant…</div>
+  </section>
+  <section class="score">
+    <div class="axis"><span>Agent</span><div class="ticks"><span>0:00</span><span>0:30</span><span>1:00</span><span>1:30</span><span>2:00</span><span>2:30</span><span>3:00</span></div><span style="text-align:right">time</span></div>
+    <div class="staff"><div class="name">Assistant<small>concierge</small></div><div class="lines"><div class="beam" style="left:0;width:6%"></div><div class="head" style="left:6%"></div></div><div class="time">0:09</div></div>
+    <div class="staff"><div class="name">Intake<small>parse + screen</small></div><div class="lines"><div class="beam" style="left:6%;width:9%"></div></div><div class="time">0:14</div></div>
+    <div class="staff"><div class="name">Job posting</div><div class="lines"><div class="beam" style="left:15%;width:22%"></div><div class="head" style="left:17%"></div><div class="lbl" style="left:16%">fetch</div><div class="head" style="left:27%"></div><div class="lbl" style="left:26%">search</div></div><div class="time">0:33</div></div>
+    <div class="staff"><div class="name">Company</div><div class="lines"><div class="beam" style="left:15%;width:28%"></div><div class="head" style="left:20%"></div><div class="head" style="left:31%"></div><div class="head" style="left:38%"></div></div><div class="time">0:42</div></div>
+    <div class="staff"><div class="name">Market</div><div class="lines"><div class="beam" style="left:15%;width:19%"></div><div class="head" style="left:24%"></div></div><div class="time">0:29</div></div>
+    <div class="staff"><div class="name">LinkedIn audit</div><div class="lines"><div class="beam" style="left:15%;width:12%"></div></div><div class="time">0:18</div></div>
+    <div class="staff"><div class="name">Gap analysis</div><div class="lines"><div class="beam" style="left:43%;width:9%"></div></div><div class="time">0:14</div></div>
+    <div class="staff"><div class="name">Resume writer</div><div class="lines"><div class="repeat" style="left:52%"></div><div class="beam" style="left:53%;width:12%"></div><div class="beam" style="left:72%;width:7%"></div><div class="repeat end" style="left:52%;width:30%"></div><div class="lbl" style="left:80%">×2</div></div><div class="time">0:31</div></div>
+    <div class="staff"><div class="name">LinkedIn writer</div><div class="lines"><div class="repeat" style="left:52%"></div><div class="beam" style="left:53%;width:10%"></div><div class="repeat end" style="left:52%;width:30%"></div></div><div class="time">0:16</div></div>
+    <div class="staff active"><div class="name">Critic<small>fact-check</small></div><div class="lines"><div class="beam" style="left:66%;width:5%"></div><div class="beam" style="left:80%;width:6%"></div><div class="now" style="left:86%"></div></div><div class="time">0:19</div></div>
+    <div class="staff"><div class="name">Your review</div><div class="lines"><div class="fermata" style="left:90%">𝄐</div><div class="repeat end" style="left:88%;width:4%"></div></div><div class="time">—</div></div>
+  </section>
+  <aside class="note">
+    <h2>Program note</h2>
+    <div><div class="big">72<small>/100</small></div><div style="font-weight:600">match for this role</div></div>
+    <div><div style="font-weight:700;margin-bottom:8px">Keywords 58% · 7 of 12</div>
+      <div class="kw"><span>Go</span><span>Kafka</span><span>Postgres</span><span>gRPC</span><span class="miss">Kubernetes</span><span class="miss">OpenTelemetry</span><span class="miss">SLOs</span></div></div>
+    <div class="rep"><a href="#">Job posting <span>12 must-haves</span></a><a href="#">Company <span>6 sources</span></a><a href="#">Market <span>4 trends</span></a><a href="#">LinkedIn <span>3 gaps</span></a></div>
+    <div class="wait"><b>𝄐 Fermata ahead</b>The run will pause here for your review of 6 proposals.</div>
+  </aside>
+</main>
+</body></html>

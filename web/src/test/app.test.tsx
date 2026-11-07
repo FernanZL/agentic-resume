@@ -3,7 +3,7 @@
  * /s/<session_id> URL routing, failed chat POST rollback, and App flows.
  */
 
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "../App";
 import {
@@ -73,17 +73,17 @@ describe("Event contract & run_failed error mapping", () => {
     const gapEv = events.find((e) => e.type === "gap_ready");
     expect(gapEv?.data).toEqual({ score: 72, keyword_coverage: 0.5833 });
 
-    const critiqueEv = events.find((e) => e.type === "critique");
-    expect(critiqueEv?.data).toEqual({
-      round: 1,
-      flagged_ids: ["resume:skills"],
-      final: true,
-    });
+    const critiques = events.filter((e) => e.type === "critique").map((e) => e.data);
+    expect(critiques).toEqual([
+      { round: 1, flagged_ids: ["resume:exp0.b0", "resume:skills"], final: false },
+      { round: 2, flagged_ids: ["resume:skills"], final: true },
+    ]);
 
     const propEv = events.find((e) => e.type === "proposals_ready");
+    // Ids only, never proposal text: the rewrite round names the two it rewrote.
     expect(propEv?.data).toEqual({
-      round: 1,
-      proposal_ids: MOCK_PROPOSALS.map((p) => p.id),
+      round: 2,
+      proposal_ids: ["resume:exp0.b0", "resume:skills"],
     });
 
     expect(formatRunFailedError("budget_exceeded")).toMatch(/budget limit/i);
@@ -111,7 +111,7 @@ describe("ReviewPanel component & draft reconciliation", () => {
     expect(screen.getAllByText("[X]%").length).toBeGreaterThan(0);
     expect(screen.getByText(/Critic Flagged/i)).toBeInTheDocument();
 
-    const editButtons = screen.getAllByRole("button", { name: "Edit" });
+    const editButtons = screen.getAllByRole("radio", { name: "Edit" });
     fireEvent.click(editButtons[0]!);
 
     const editBox = screen.getByLabelText("Edit text for resume:summary");
@@ -190,9 +190,7 @@ describe("ExportPanel live mode & snapshot.reviewed gating", () => {
     expect(screen.getByRole("button", { name: /Download DOCX/i })).toBeDisabled();
     expect(screen.getByRole("button", { name: /Download Markdown/i })).toBeDisabled();
     expect(screen.getByRole("button", { name: /Save as PDF \(Print View\)/i })).toBeDisabled();
-    expect(
-      screen.getByText(/Proposals left without a decision count as rejected/i),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/Submit your review first/i)).toBeInTheDocument();
     expect(screen.queryByText(/Elena Vance/i)).not.toBeInTheDocument();
   });
 
@@ -285,38 +283,37 @@ describe("App end-to-end mocked workflow, chat failure rollback & /s/<session_id
     render(<App />);
 
     const loadSampleBtn = screen.getByRole("button", {
-      name: /Load Fictional Sample \(Elena Vance\)/i,
+      name: /Try it with a fictional sample/i,
     });
     fireEvent.click(loadSampleBtn);
 
-    const titleInput = screen.getByLabelText(/Target Job Title/i) as HTMLInputElement;
+    const titleInput = screen.getByLabelText(/^Job title/i) as HTMLInputElement;
     expect(titleInput.value).toBe("Staff Distributed Systems Engineer");
 
-    const launchBtn = screen.getByRole("button", { name: /Launch Optimization Session/i });
+    const launchBtn = screen.getByRole("button", { name: /Start the analysis/i });
     fireEvent.click(launchBtn);
 
     await waitFor(() => {
-      expect(screen.getByText(/Multi-Agent Execution Pipeline/i)).toBeInTheDocument();
+      expect(screen.getByRole("region", { name: /The run as a score/i })).toBeInTheDocument();
     });
     expect(window.location.pathname).toMatch(/^\/s\//);
 
-    const reviewSimBtn = screen.getByRole("button", { name: "Review Gate" });
+    const reviewSimBtn = screen.getByRole("button", { name: "Review gate" });
     fireEvent.click(reviewSimBtn);
 
     await waitFor(() => {
-      expect(
-        screen.getByText(/Chat is paused while proposals await your decision/i),
-      ).toBeInTheDocument();
+      expect(screen.getByText(/Chat is paused for your review/i)).toBeInTheDocument();
     });
 
     // Edit a proposal, switch away to Timeline tab, then switch back to Review tab and verify draft persists.
-    const editButtons = screen.getAllByRole("button", { name: "Edit" });
+    const editButtons = screen.getAllByRole("radio", { name: "Edit" });
     fireEvent.click(editButtons[0]!);
     const editBox = screen.getByLabelText("Edit text for resume:summary") as HTMLTextAreaElement;
     fireEvent.change(editBox, { target: { value: "Persisted draft across tab switch" } });
 
-    fireEvent.click(screen.getByRole("button", { name: /1\. Live Pipeline & Reports/i }));
-    fireEvent.click(screen.getByRole("button", { name: /2\. Review Proposals/i }));
+    const views = within(screen.getByRole("navigation", { name: "Session views" }));
+    fireEvent.click(views.getByRole("button", { name: /^Score$/ }));
+    fireEvent.click(views.getByRole("button", { name: /^Review/ }));
 
     expect(
       (screen.getByLabelText("Edit text for resume:summary") as HTMLTextAreaElement).value,
@@ -362,10 +359,10 @@ describe("App end-to-end mocked workflow, chat failure rollback & /s/<session_id
     render(<App />);
 
     await waitFor(() => {
-      expect(screen.getByLabelText(/Message the concierge/i)).not.toBeDisabled();
+      expect(screen.getByLabelText(/Message the assistant/i)).not.toBeDisabled();
     });
 
-    const input = screen.getByLabelText(/Message the concierge/i) as HTMLTextAreaElement;
+    const input = screen.getByLabelText(/Message the assistant/i) as HTMLTextAreaElement;
     fireEvent.change(input, { target: { value: "Please emphasize Kafka metrics" } });
     fireEvent.click(screen.getByRole("button", { name: /Send/i }));
 
@@ -377,7 +374,7 @@ describe("App end-to-end mocked workflow, chat failure rollback & /s/<session_id
     expect(input.value).toBe("Please emphasize Kafka metrics");
     expect(input).not.toBeDisabled();
     expect(
-      screen.queryByText("Please emphasize Kafka metrics", { selector: "p.chat-text" }),
+      screen.queryByText("Please emphasize Kafka metrics", { selector: ".msg-text p" }),
     ).not.toBeInTheDocument();
     expect(
       fetchSpy.mock.calls.filter(
@@ -396,10 +393,12 @@ describe("App end-to-end mocked workflow, chat failure rollback & /s/<session_id
       expect(screen.getByText(/Grounded Rewrite Proposals \(6\)/i)).toBeInTheDocument();
     });
 
-    expect(screen.getByText("72/100")).toBeInTheDocument();
-    expect(screen.getByText(/Status: REVIEW/i)).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /72\s*\/100 match for this role/i }),
+    ).toBeInTheDocument();
+    expect(screen.getAllByText(/Waiting for your review/i).length).toBeGreaterThan(0);
 
-    fireEvent.click(screen.getByRole("button", { name: /New Session/i }));
+    fireEvent.click(screen.getByRole("button", { name: /New session/i }));
     expect(window.location.pathname).toBe("/");
   });
 
@@ -408,14 +407,12 @@ describe("App end-to-end mocked workflow, chat failure rollback & /s/<session_id
     render(<App />);
 
     await waitFor(() => {
-      expect(screen.getByRole("heading", { name: /Session Not Found/i })).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: /Session not found/i })).toBeInTheDocument();
     });
-    expect(screen.getByText(/404 · session_not_found/i)).toBeInTheDocument();
+    expect(screen.getByText(/There is no session/i)).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: /Return to Start Screen/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Start a new session/i }));
     expect(window.location.pathname).toBe("/");
-    expect(
-      screen.getByRole("button", { name: /Launch Optimization Session/i }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Start the analysis/i })).toBeInTheDocument();
   });
 });

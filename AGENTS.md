@@ -7,6 +7,7 @@ Read these in order before changing anything:
 2. `docs/CONTRACT.md`: the API, live events and tool interfaces (frozen)
 3. `docs/CODE_STANDARDS.md`: how code is written here
 4. `docs/STATUS.md`: what is done and what is next
+5. For any UI work: `PRODUCT.md` (who it's for) and `DESIGN.md` (the visual system, "The Score"). The direction contract is in `.impeccable/surfaces/`
 
 ## Who owns what
 

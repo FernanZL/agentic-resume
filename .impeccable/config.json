@@ -1,0 +1,62 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "cramped-padding",
+        "value": "*",
+        "files": [
+          ".impeccable/mocks/decision/assigned.html"
+        ],
+        "createdAt": "2026-11-07T18:54:49.482Z",
+        "reason": "Claude: staff contents start at the system barline by design in the score sketch (throwaway decision sketch)"
+      },
+      {
+        "rule": "repeating-stripes-gradient",
+        "value": "*",
+        "files": [
+          ".impeccable/mocks/decision/assigned.html"
+        ],
+        "createdAt": "2026-11-07T18:54:49.494Z",
+        "reason": "Claude: the stripes are the score's five staff lines, a functional signature, in a throwaway decision sketch; the build draws staves in SVG"
+      },
+      {
+        "rule": "cramped-padding",
+        "value": "*",
+        "files": [
+          ".impeccable/mocks/decision/canon.html"
+        ],
+        "createdAt": "2026-11-07T18:54:49.506Z",
+        "reason": "Claude: canon decision sketch, header row text is vertically centred (throwaway sketch)"
+      },
+      {
+        "rule": "overused-font",
+        "value": "*",
+        "files": [
+          ".impeccable/mocks/decision/canon.html"
+        ],
+        "createdAt": "2026-11-07T18:54:49.520Z",
+        "reason": "Claude: the canon card depicts the category standard, which uses Inter by definition (throwaway sketch)"
+      },
+      {
+        "rule": "cream-palette",
+        "value": "*",
+        "files": [
+          ".impeccable/mocks/decision/challenger-centre-rail.html"
+        ],
+        "createdAt": "2026-11-07T18:54:49.532Z",
+        "reason": "Claude: the catalog world's own 'unbleached bone' ground (rw-centre-rail-reference-setting), shown as dealt"
+      },
+      {
+        "rule": "flat-type-hierarchy",
+        "value": "*",
+        "files": [
+          ".impeccable/mocks/decision/challenger-centre-rail.html"
+        ],
+        "createdAt": "2026-11-07T18:54:49.546Z",
+        "reason": "Claude: the catalog world's small-caps apparatus grammar, shown as dealt (throwaway sketch)"
+      }
+    ]
+  }
+}

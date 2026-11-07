@@ -11,3 +11,6 @@ node_modules/
 web/dist/
 evals/results/
 *.tsbuildinfo
+.impeccable/hook.cache.json
+.impeccable/review/
+.impeccable/config.local.json

@@ -1,0 +1,398 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-07T19:32:28.676038+00:00",
+  "title": "Design System: Agentic Resume",
+  "extensions": {
+    "colorMeta": {
+      "publisher-blue": {
+        "role": "primary",
+        "displayName": "Publisher Blue",
+        "canonical": "#23408e",
+        "tonalRamp": [
+          "#091024",
+          "#122047",
+          "#1a306a",
+          "#23408e",
+          "#6579b0",
+          "#9ca9cc",
+          "#c8cfe3",
+          "#e9ecf4"
+        ]
+      },
+      "publisher-blue-deep": {
+        "role": "primary",
+        "displayName": "Publisher Blue Deep",
+        "canonical": "#1a3170",
+        "tonalRamp": [
+          "#060c1c",
+          "#0d1838",
+          "#142554",
+          "#1a3170",
+          "#5f6f9b",
+          "#98a2bf",
+          "#c6ccdb",
+          "#e8eaf1"
+        ]
+      },
+      "blue-tint": {
+        "role": "primary",
+        "displayName": "Blue Tint",
+        "canonical": "#e4e9f5",
+        "tonalRamp": [
+          "#393a3d",
+          "#72747a",
+          "#abafb8",
+          "#e4e9f5",
+          "#ecf0f8",
+          "#f3f5fa",
+          "#f8fafc",
+          "#fcfdfe"
+        ]
+      },
+      "vermilion-now": {
+        "role": "secondary",
+        "displayName": "Vermilion Now",
+        "canonical": "#e0482a",
+        "tonalRamp": [
+          "#38120a",
+          "#702415",
+          "#a83620",
+          "#e0482a",
+          "#e97f6a",
+          "#f1ad9f",
+          "#f7d1ca",
+          "#fcedea"
+        ]
+      },
+      "engraving-black": {
+        "role": "neutral",
+        "displayName": "Engraving Black",
+        "canonical": "#121212",
+        "tonalRamp": [
+          "#040404",
+          "#090909",
+          "#0e0e0e",
+          "#121212",
+          "#595959",
+          "#949494",
+          "#c4c4c4",
+          "#e7e7e7"
+        ]
+      },
+      "ink-soft": {
+        "role": "neutral",
+        "displayName": "Ink Soft",
+        "canonical": "#3a3d47",
+        "tonalRamp": [
+          "#0e0f12",
+          "#1d1e24",
+          "#2c2e35",
+          "#3a3d47",
+          "#75777e",
+          "#a6a8ac",
+          "#ceced1",
+          "#ebeced"
+        ]
+      },
+      "staff-white": {
+        "role": "neutral",
+        "displayName": "Staff White",
+        "canonical": "#f6f7f5",
+        "tonalRamp": [
+          "#3e3e3d",
+          "#7b7c7a",
+          "#b8b9b8",
+          "#f6f7f5",
+          "#f9f9f8",
+          "#fbfbfa",
+          "#fdfdfc",
+          "#fefefe"
+        ]
+      },
+      "sheet": {
+        "role": "neutral",
+        "displayName": "Sheet",
+        "canonical": "#ffffff",
+        "tonalRamp": [
+          "#404040",
+          "#808080",
+          "#bfbfbf",
+          "#ffffff",
+          "#ffffff",
+          "#ffffff",
+          "#ffffff",
+          "#ffffff"
+        ]
+      },
+      "on-blue": {
+        "role": "neutral",
+        "displayName": "On Blue",
+        "canonical": "#ffffff",
+        "tonalRamp": [
+          "#404040",
+          "#808080",
+          "#bfbfbf",
+          "#ffffff",
+          "#ffffff",
+          "#ffffff",
+          "#ffffff",
+          "#ffffff"
+        ]
+      },
+      "on-blue-soft": {
+        "role": "neutral",
+        "displayName": "On Blue Soft",
+        "canonical": "#cdd6ee",
+        "tonalRamp": [
+          "#33363c",
+          "#666b77",
+          "#9aa0b2",
+          "#cdd6ee",
+          "#dce2f3",
+          "#e8edf7",
+          "#f2f5fb",
+          "#fafbfd"
+        ]
+      },
+      "rule": {
+        "role": "neutral",
+        "displayName": "Rule",
+        "canonical": "rgba(18, 18, 18, 0.16)",
+        "tonalRamp": [
+          "rgba(18, 18, 18, 0.9)",
+          "rgba(18, 18, 18, 0.7)",
+          "rgba(18, 18, 18, 0.5)",
+          "rgba(18, 18, 18, 0.35)",
+          "rgba(18, 18, 18, 0.22)",
+          "rgba(18, 18, 18, 0.16)",
+          "rgba(18, 18, 18, 0.1)",
+          "rgba(18, 18, 18, 0.05)"
+        ]
+      },
+      "staff-line": {
+        "role": "neutral",
+        "displayName": "Staff Line",
+        "canonical": "rgba(18, 18, 18, 0.22)",
+        "tonalRamp": [
+          "rgba(18, 18, 18, 0.9)",
+          "rgba(18, 18, 18, 0.7)",
+          "rgba(18, 18, 18, 0.5)",
+          "rgba(18, 18, 18, 0.35)",
+          "rgba(18, 18, 18, 0.22)",
+          "rgba(18, 18, 18, 0.16)",
+          "rgba(18, 18, 18, 0.1)",
+          "rgba(18, 18, 18, 0.05)"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "The match-score figure in the program note only."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Start-screen H1; 30px at 760px and below."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Panel heads: the part, Review, Export."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Default UI text, tabular figures on."
+      },
+      "body-reading": {
+        "displayName": "Reading",
+        "purpose": "Report summaries and diff text, capped near 72ch."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Uppercase column, report-block, diff and section headings (0.06–0.08em)."
+      },
+      "notation": {
+        "displayName": "Notation",
+        "purpose": "Tool labels beside noteheads, axis ticks, repeat counts, running times (11–13px, 700–800)."
+      }
+    },
+    "shadows": [],
+    "motion": [
+      {
+        "name": "beam-in",
+        "value": "scaleX(0) to 1, 0.6s cubic-bezier(0.16, 1, 0.3, 1)",
+        "purpose": "A beam grows from its left edge as an agent works."
+      },
+      {
+        "name": "note-in",
+        "value": "opacity 0, translateY(-8px) to rest, 0.35s cubic-bezier(0.16, 1, 0.3, 1)",
+        "purpose": "A notehead drops in on a tool call."
+      },
+      {
+        "name": "playhead",
+        "value": "left 0.5s linear",
+        "purpose": "The vermilion playhead sweeps with elapsed time."
+      },
+      {
+        "name": "control-fill",
+        "value": "background-color, color 0.15s ease-out",
+        "purpose": "Button hover fills."
+      },
+      {
+        "name": "reduced-motion",
+        "value": "animation: none; transition: none (all elements)",
+        "purpose": "Under prefers-reduced-motion every state still renders; only growth and sweep are removed."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "wide",
+        "value": "1280px",
+        "purpose": "max-width: chat 290px, note 260px, staff names 140px."
+      },
+      {
+        "name": "medium",
+        "value": "1100px",
+        "purpose": "max-width: program note moves above the score; start screen one column."
+      },
+      {
+        "name": "narrow",
+        "value": "760px",
+        "purpose": "max-width: stacked column (note, score, chat); staves become name rows over full-width lanes; system barline, final double barline and playhead hidden."
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Button",
+      "kind": "button",
+      "refersTo": "button",
+      "description": "Default squared control: sheet ground, 1.5px ink rule, no radius.",
+      "html": "<button class=\"ds-btn\">Open the export</button>",
+      "css": ".ds-btn { display:inline-flex; align-items:center; gap:8px; min-height:38px; padding:8px 16px; border:1.5px solid var(--ink, #121212); border-radius:0; background:var(--sheet, #fff); color:var(--ink, #121212); font:600 14px/1.2 var(--font, 'Hanken Grotesk Variable', 'Hanken Grotesk', system-ui, sans-serif); cursor:pointer; transition:background-color .15s ease-out, color .15s ease-out; } .ds-btn:hover { background:var(--blue-tint, #e4e9f5); } .ds-btn:focus-visible { outline:2px solid var(--blue, #23408e); outline-offset:2px; }"
+    },
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The one forward action in a panel, in publisher blue.",
+      "html": "<button class=\"ds-btn-primary\">Start the run</button>",
+      "css": ".ds-btn-primary { display:inline-flex; align-items:center; min-height:38px; padding:8px 16px; border:1.5px solid var(--blue, #23408e); border-radius:0; background:var(--blue, #23408e); color:var(--on-blue, #fff); font:600 14px/1.2 var(--font, 'Hanken Grotesk Variable', 'Hanken Grotesk', system-ui, sans-serif); cursor:pointer; transition:background-color .15s ease-out; } .ds-btn-primary:hover { background:var(--blue-deep, #1a3170); } .ds-btn-primary:focus-visible { outline:2px solid var(--blue, #23408e); outline-offset:2px; }"
+    },
+    {
+      "name": "Field",
+      "kind": "input",
+      "refersTo": "field",
+      "description": "Squared text field with a 1.5px ink rule.",
+      "html": "<input class=\"ds-field\" placeholder=\"Role title\" />",
+      "css": ".ds-field { display:block; width:100%; padding:10px 12px; border:1.5px solid var(--ink, #121212); border-radius:0; background:var(--sheet, #fff); color:var(--ink, #121212); font:400 15px/1.5 var(--font, 'Hanken Grotesk Variable', 'Hanken Grotesk', system-ui, sans-serif); caret-color:var(--blue, #23408e); } .ds-field:focus-visible { outline:2px solid var(--blue, #23408e); outline-offset:2px; }"
+    },
+    {
+      "name": "Keyword Chips",
+      "kind": "chip",
+      "refersTo": "chip",
+      "description": "Solid for present keywords; dashed only for missing ones.",
+      "html": "<div class=\"ds-chips\"><span class=\"ds-chip\">Python</span><span class=\"ds-chip\">Kafka</span><span class=\"ds-chip ds-chip-missing\">Kubernetes</span></div>",
+      "css": ".ds-chips { display:flex; flex-wrap:wrap; gap:6px; } .ds-chip { padding:3px 9px; border:1.5px solid var(--ink, #121212); font:600 12.5px/1.3 var(--font, 'Hanken Grotesk Variable', 'Hanken Grotesk', system-ui, sans-serif); color:var(--ink, #121212); } .ds-chip-missing { border-style:dashed; font-weight:500; }"
+    },
+    {
+      "name": "Decision Group",
+      "kind": "custom",
+      "refersTo": "segmented-selected",
+      "description": "Accept / Edit / Reject: butted squared options; selected inverts to ink.",
+      "html": "<div class=\"ds-decision\" role=\"radiogroup\"><button class=\"ds-opt\" aria-checked=\"true\">Accept</button><button class=\"ds-opt\">Edit</button><button class=\"ds-opt\">Reject</button></div>",
+      "css": ".ds-decision { display:inline-flex; } .ds-opt { min-height:34px; padding:4px 14px; border:1.5px solid var(--ink, #121212); border-radius:0; background:var(--sheet, #fff); color:var(--ink, #121212); font:600 13.5px var(--font, 'Hanken Grotesk Variable', 'Hanken Grotesk', system-ui, sans-serif); cursor:pointer; } .ds-opt + .ds-opt { margin-left:-1.5px; } .ds-opt:hover { background:var(--blue-tint, #e4e9f5); } .ds-opt[aria-checked=\"true\"] { background:var(--ink, #121212); color:var(--sheet, #fff); } .ds-opt:focus-visible { outline:2px solid var(--blue, #23408e); outline-offset:2px; }"
+    },
+    {
+      "name": "Shell",
+      "kind": "nav",
+      "refersTo": "shell",
+      "description": "Sticky 60px publisher-blue header with wordmark, role, tabs and live status.",
+      "html": "<header class=\"ds-shell\"><span class=\"ds-wordmark\">Agentic Resume</span><span class=\"ds-role\">Staff Engineer <span>· VelaStream</span></span><nav class=\"ds-tabs\"><a class=\"ds-tab\" aria-current=\"page\">Score</a><a class=\"ds-tab\">Review <b class=\"ds-count\">6</b></a><a class=\"ds-tab\">Export</a></nav><span class=\"ds-status\"><i class=\"ds-dot\"></i>4 agents in parallel</span></header>",
+      "css": ".ds-shell { display:flex; align-items:center; gap:28px; min-height:60px; padding:0 24px; background:var(--blue, #23408e); color:var(--on-blue, #fff); font:400 14px var(--font, 'Hanken Grotesk Variable', 'Hanken Grotesk', system-ui, sans-serif); } .ds-wordmark { font-size:17px; font-weight:800; letter-spacing:-0.01em; } .ds-role { font-size:15px; } .ds-role span { color:var(--on-blue-soft, #cdd6ee); } .ds-tabs { display:flex; align-self:stretch; margin-left:auto; } .ds-tab { display:inline-flex; align-items:center; gap:8px; padding:0 16px; border-bottom:3px solid transparent; font-weight:600; cursor:pointer; } .ds-tab:hover { border-bottom-color:var(--on-blue-soft, #cdd6ee); } .ds-tab[aria-current=\"page\"] { border-bottom-color:var(--on-blue, #fff); } .ds-count { min-width:22px; padding:1px 6px; background:var(--on-blue, #fff); color:var(--blue, #23408e); font-size:12px; font-weight:800; text-align:center; } .ds-status { font-size:13px; font-weight:600; } .ds-dot { display:inline-block; width:8px; height:8px; margin-right:8px; border-radius:50%; background:var(--now, #e0482a); }"
+    },
+    {
+      "name": "Staff",
+      "kind": "custom",
+      "description": "One agent's staff: name, five staff lines, beams, a notehead with its tool label, the vermilion playhead, and a right-aligned running time.",
+      "html": "<div class=\"ds-staff\"><div class=\"ds-staff-name\"><b>Job posting</b><span>researcher</span></div><div class=\"ds-lane\"><span class=\"ds-beam\" style=\"left:10%;width:30%\"></span><span class=\"ds-beam ds-beam-live\" style=\"left:42%;width:14%\"></span><span class=\"ds-note\" style=\"left:42%\"><i></i><em>fetch</em></span><span class=\"ds-playhead\" style=\"left:56%\"></span></div><div class=\"ds-time\">0:44</div></div>",
+      "css": ".ds-staff { display:grid; grid-template-columns:168px minmax(0,1fr) 92px; column-gap:16px; align-items:center; min-height:48px; font-family:var(--font, 'Hanken Grotesk Variable', 'Hanken Grotesk', system-ui, sans-serif); font-variant-numeric:tabular-nums; color:var(--ink, #121212); } .ds-staff-name b { display:block; font-size:14px; font-weight:700; } .ds-staff-name span { font-size:12px; color:var(--ink-soft, #3a3d47); } .ds-lane { position:relative; height:34px; border-left:2px solid var(--ink, #121212); background:repeating-linear-gradient(to bottom, transparent 0 3px, var(--staff, rgba(18,18,18,.22)) 3px 4px, transparent 4px 7px); background-size:100% 7px; background-position:0 1px; } .ds-beam { position:absolute; top:13px; height:9px; background:var(--ink, #121212); } .ds-beam-live { background:var(--now, #e0482a); } .ds-note { position:absolute; top:0; z-index:2; } .ds-note i { position:absolute; top:1px; left:-7px; width:14px; height:10px; border-radius:50%; background:var(--ink, #121212); transform:rotate(-20deg); } .ds-note em { position:absolute; top:-3px; left:9px; padding:0 3px; background:var(--paper, #f6f7f5); font:normal 700 11px/1.3 var(--font, 'Hanken Grotesk Variable', 'Hanken Grotesk', system-ui, sans-serif); white-space:nowrap; } .ds-playhead { position:absolute; top:-4px; bottom:-4px; width:2px; margin-left:-1px; background:var(--now, #e0482a); } .ds-time { font-size:13px; font-weight:700; text-align:right; }"
+    },
+    {
+      "name": "Repeat and Fermata",
+      "kind": "custom",
+      "description": "Writer/critic rounds between repeat barlines with a ×n count; the review fermata in blue while it waits.",
+      "html": "<div class=\"ds-rep-lane\"><span class=\"ds-rep ds-rep-open\" style=\"left:10%\"></span><span class=\"ds-beam2\" style=\"left:14%;width:20%\"></span><span class=\"ds-rep ds-rep-close\" style=\"left:46%\"></span><span class=\"ds-rep-count\" style=\"left:46%\">×2</span><svg class=\"ds-fermata\" style=\"left:78%\" viewBox=\"0 0 32 18\"><path d=\"M2 16 A14 14 0 0 1 30 16\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.4\"/><circle cx=\"16\" cy=\"13\" r=\"2.6\" fill=\"currentColor\"/></svg></div>",
+      "css": ".ds-rep-lane { position:relative; height:34px; margin-top:18px; font-family:var(--font, 'Hanken Grotesk Variable', 'Hanken Grotesk', system-ui, sans-serif); } .ds-beam2 { position:absolute; top:13px; height:9px; background:var(--ink, #121212); } .ds-rep { position:absolute; top:0; bottom:0; width:12px; } .ds-rep-open { box-shadow:inset 3px 0 0 var(--ink, #121212); } .ds-rep-open::before { content:''; position:absolute; top:0; bottom:0; left:5px; border-left:1px solid var(--ink, #121212); } .ds-rep-close { margin-left:-12px; box-shadow:inset -3px 0 0 var(--ink, #121212); } .ds-rep-close::before { content:''; position:absolute; top:0; bottom:0; right:5px; border-right:1px solid var(--ink, #121212); } .ds-rep::after { content:''; position:absolute; top:10px; width:4px; height:14px; background:radial-gradient(circle, var(--ink, #121212) 1.8px, transparent 2.2px) 0 0 / 4px 7px; } .ds-rep-open::after { left:8px; } .ds-rep-close::after { right:8px; } .ds-rep-count { position:absolute; top:-15px; margin-left:4px; font-size:12px; font-weight:800; } .ds-fermata { position:absolute; top:2px; width:30px; height:17px; margin-left:-15px; color:var(--blue, #23408e); }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Score",
+    "overview": "The live run is engraved as an orchestral score. Every agent is a labelled staff on one shared time axis, read left to right as it plays: work is a beamed bar, a tool call is a notehead with its tool written beside it, the writer–critic rewrite rounds sit inside repeat barlines with a ×n count, the human review is a fermata, and a finished run closes with a final double barline. The rest of the product (chat, program note, review, export, start screen) is set in the same engraving: black ink on staff white, hairline rules, squared 1.5px-ruled controls, and one grotesk with tabular figures.\n\nThe page is dense and quiet, like printed music. Hierarchy comes from weight, size and ink, never from grey panels, cards on cards, or soft shadows. Colour is a strict value set: publisher blue owns the shell and the one forward call to action, and vermilion means \"now\" and nothing else. Dashed rules are the system's single sign for missing or unverified.",
+    "keyCharacteristics": [
+      "Engraving black on staff white; no grey chrome, no shadows, no radius on any control or container.",
+      "Publisher-blue shell header (60px) carrying wordmark, role, tabs and live status.",
+      "Vermilion reserved for \"now\": playhead, live beam, running-staff dot, live status, streaming cursor.",
+      "Dashed borders only for missing or unverified things.",
+      "Music notation as the information design, not decoration: staves, beams, noteheads, repeat barlines, fermata, system barline, final double barline.",
+      "One family (Hanken Grotesk Variable), weights 400–800, tabular figures everywhere."
+    ],
+    "rules": [
+      {
+        "name": "The Vermilion Is Now Rule",
+        "body": "Vermilion marks only what is happening this instant: the playhead, a live beam, a running staff, the live status, the streaming cursor. When the thing stops, the vermilion goes. A finished run has no vermilion on screen.",
+        "section": "colors"
+      },
+      {
+        "name": "The Strict Value Set Rule",
+        "body": "New surfaces draw from the twelve colour tokens and nothing else. There are no greys beyond Ink Soft, Rule and Staff Line; no tinted panels beyond Blue Tint; no second accent.",
+        "section": "colors"
+      },
+      {
+        "name": "The Status Is Never Colour Alone Rule",
+        "body": "Every vermilion or blue state also has words or a shape: \"playing now\", \"working\", a notehead, a fermata, a dashed border.",
+        "section": "colors"
+      },
+      {
+        "name": "The Weight Not Grey Rule",
+        "body": "Hierarchy is built with weight (400 / 600 / 700 / 800) and size. Reach for a heavier weight before a lighter colour.",
+        "section": "typography"
+      },
+      {
+        "name": "The Tabular Figures Rule",
+        "body": "Every number is set in tabular figures and right-aligned when it sits in a column (running times, report counts).",
+        "section": "typography"
+      },
+      {
+        "name": "The Paper And Ink Rule",
+        "body": "Raise a surface by giving it Sheet white and a 1.5px black rule, never by shadow, blur or tint.",
+        "section": "elevation"
+      },
+      {
+        "name": "The Squared Rule Rule",
+        "body": "Controls are squared with a 1.5px rule and no radius. A rounded button or pill is outside this world.",
+        "section": "shapes"
+      },
+      {
+        "name": "The Dashed Means Unverified Rule",
+        "body": "A dashed border appears only where something is missing or unverified: keywords missing from the resume, a critic-flagged verdict, the critic's issue list. Everything verified or present is solid.",
+        "section": "shapes"
+      }
+    ],
+    "dos": [
+      "Do keep vermilion (`vermilion-now`) for the present moment only: the playhead, live beams, running staffs, the live status and the streaming cursor.",
+      "Do draw every control and container square with a 1.5px solid Engraving Black rule and 0px radius.",
+      "Do use a dashed rule only for missing or unverified things: missing keywords, critic-flagged verdicts, issue lists.",
+      "Do express agent work in the notation vocabulary: staves, beams, noteheads with tool labels, repeat barlines with ×n, the fermata, the system barline and the final double barline.",
+      "Do build hierarchy with weight and size in Hanken Grotesk, with tabular figures on every number.",
+      "Do keep every state rendered when motion is reduced; remove only animation and transition.",
+      "Do collapse at 1280px (tighter columns), 1100px (program note above the score) and 760px (stacked single column, staves as name rows over full-width lanes)."
+    ],
+    "donts": [
+      "Don't use vermilion for errors, warnings, emphasis or branding; errors are inverted black strips and warnings thicken a black rule.",
+      "Don't use dashed borders for decoration, dividers or empty states.",
+      "Don't round controls, cards or chips, or add drop shadows; the only round forms are noteheads, the fermata and live dots.",
+      "Don't add grey panels or a second accent; the value set is fixed.",
+      "Don't convey status by colour alone; pair it with words or a notation shape."
+    ]
+  }
+}

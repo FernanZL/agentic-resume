@@ -1,19 +1,18 @@
 /**
- * Human-in-the-loop Proposal Diff Review workbench.
- * Highlights [X]% metric placeholders, shows critic flags, reconciles drafts when proposals change,
- * and disables submission unless the session is in 'review' status.
+ * The review: every proposal as original and rewrite side by side, with the critic's
+ * verdict, highlighted placeholders and an accept / edit / reject decision. Submitting
+ * is only possible while the run waits at its fermata.
  */
 
 import { type ReactNode, useState } from "react";
 import {
   type Action,
   type Decision,
-  type GapReport,
   type Proposal,
-  type Report,
   type ReviewDraftEntry,
   reconcileReviewDrafts,
 } from "../api";
+import { type StaffNode, targetName } from "../score";
 import { IconAlert, IconCheck } from "./Icons";
 
 export interface ReviewPanelProps {
@@ -21,12 +20,10 @@ export interface ReviewPanelProps {
   initialDecisions: Record<string, Decision>;
   drafts?: Record<string, ReviewDraftEntry>;
   onDraftsChange?: (next: Record<string, ReviewDraftEntry>) => void;
-  gap?: GapReport | null;
-  reports?: Record<string, Report>;
   isReviewPending: boolean;
   submitting: boolean;
   onSubmitReview: (decisions: Record<string, Decision>) => Promise<void>;
-  onOpenTimeline?: () => void;
+  onOpenStaff?: (node: StaffNode) => void;
 }
 
 const PLACEHOLDER_SPLIT_RE = /(\$?\[[A-Za-z0-9_]+\](?:%|[xX]|[kKmMbB]\b)?)/g;
@@ -37,11 +34,7 @@ function renderHighlightedText(text: string): ReactNode[] {
     if (PLACEHOLDER_SPLIT_RE.test(part)) {
       PLACEHOLDER_SPLIT_RE.lastIndex = 0;
       return (
-        <mark
-          key={idx}
-          className="placeholder-token"
-          title="Metric placeholder — fill in before export"
-        >
+        <mark key={idx} className="placeholder" title="Fill in your real number before exporting">
           {part}
         </mark>
       );
@@ -50,17 +43,21 @@ function renderHighlightedText(text: string): ReactNode[] {
   });
 }
 
+const ACTIONS: Array<{ id: Action; label: string }> = [
+  { id: "accept", label: "Accept" },
+  { id: "edit", label: "Edit" },
+  { id: "reject", label: "Reject" },
+];
+
 export function ReviewPanel({
   proposals,
   initialDecisions,
   drafts,
   onDraftsChange,
-  gap,
-  reports,
   isReviewPending,
   submitting,
   onSubmitReview,
-  onOpenTimeline,
+  onOpenStaff,
 }: ReviewPanelProps) {
   const [internalDrafts, setInternalDrafts] = useState<Record<string, ReviewDraftEntry>>(() =>
     reconcileReviewDrafts(proposals, initialDecisions, {}),
@@ -145,176 +142,139 @@ export function ReviewPanel({
 
   if (proposals.length === 0) {
     return (
-      <section className="panel empty-state">
+      <section className="review review-empty">
+        <h2>Review</h2>
         <p>
-          No rewrite proposals generated yet. Run the analysis pipeline to review grounded diffs.
+          No proposals yet. They appear here once the writers finish and the critic has checked
+          them.
         </p>
       </section>
     );
   }
 
   const okCount = proposals.filter((p) => p.status === "ok").length;
-  const flaggedCount = proposals.filter((p) => p.status === "flagged").length;
-  const reportCount = reports ? Object.keys(reports).length : 0;
+  const flaggedCount = proposals.length - okCount;
+  const locked = !isReviewPending || submitting;
 
   return (
-    <section className="review-stack" aria-label="Proposal diff review">
-      {gap ? (
-        <div className="telemetry-ribbon" aria-label="Research and gap synthesis summary">
-          <div className="ribbon-metric">
-            <span className="ribbon-value">{gap.score}/100</span>
-            <span className="ribbon-label">ATS Role Match</span>
-          </div>
-          <div className="ribbon-metric">
-            <span className="ribbon-value">{Math.round(gap.keyword_coverage * 100)}%</span>
-            <span className="ribbon-label">
-              Keywords ({gap.matched_keywords.length} matched · {gap.missing_keywords.length}{" "}
-              missing)
-            </span>
-          </div>
-          <div className="ribbon-metric">
-            <span className="ribbon-value">{reportCount} Reports</span>
-            <span className="ribbon-label">Job · Company · Market · LinkedIn</span>
-          </div>
-          {onOpenTimeline ? (
-            <button type="button" className="btn btn-small btn-secondary" onClick={onOpenTimeline}>
-              Inspect Full Reports &amp; DAG
-            </button>
-          ) : null}
-        </div>
-      ) : null}
-
-      <div className="panel review-toolbar">
-        <div className="review-toolbar-info">
-          <h2>Grounded Rewrite Proposals ({proposals.length})</h2>
+    <section className="review" aria-labelledby="review-title">
+      <header className="review-head">
+        <div>
+          <h2 id="review-title">Grounded Rewrite Proposals ({proposals.length})</h2>
           <p>
-            <strong>{okCount}</strong> verified by anti-fabrication critic
-            {flaggedCount > 0 ? ` · ${flaggedCount} flagged with notes` : ""}. Placeholders like{" "}
-            <mark className="placeholder-token">[X]%</mark> mark metrics you can customize via{" "}
-            <strong>Edit</strong>. Proposals without a decision count as rejected.
+            {okCount} passed the critic{flaggedCount ? `, ${flaggedCount} still flagged` : ""}. Fill
+            in placeholders like <mark className="placeholder">[X]%</mark> with your real numbers
+            through Edit. Proposals left without a decision count as rejected.
           </p>
           {!isReviewPending ? (
-            <p className="panel-subcopy">
-              Review submission is only available when the session is paused for review. For later
-              changes, ask the assistant to revise a proposal in the chat.
+            <p className="review-closed">
+              This review is closed. For later changes, ask the assistant to revise a proposal in
+              the chat.
             </p>
           ) : null}
         </div>
-
-        <div className="review-toolbar-actions">
-          <button
-            type="button"
-            className="btn btn-secondary"
-            onClick={handleAcceptAllOk}
-            disabled={!isReviewPending || submitting}
-          >
-            <IconCheck width={15} height={15} />
-            <span>Accept All OK ({okCount})</span>
+        <div className="review-actions">
+          <button type="button" className="btn" onClick={handleAcceptAllOk} disabled={locked}>
+            <IconCheck width={15} height={15} aria-hidden="true" />
+            Accept all that passed ({okCount})
           </button>
-
           <button
             type="button"
             className="btn btn-primary"
             onClick={() => void handleSubmit()}
-            disabled={!isReviewPending || submitting}
+            disabled={locked}
           >
             {submitting
-              ? "Applying Decisions..."
+              ? "Applying your decisions…"
               : isReviewPending
                 ? "Submit Review & Finalize"
                 : "Review Finalized"}
           </button>
         </div>
-      </div>
+      </header>
 
-      <div className="proposal-list">
+      <ol className="proposals">
         {proposals.map((p) => {
           const current = getDecision(p);
+          const writer: StaffNode = p.document === "resume" ? "resume_writer" : "linkedin_writer";
           return (
-            <article
+            <li
               key={p.id}
-              className={`panel proposal-card proposal-action-${current.action} ${
-                p.status === "flagged" ? "proposal-flagged" : ""
-              }`}
+              id={`proposal-${p.id}`}
+              tabIndex={-1}
+              className={`proposal proposal-${current.action}${p.status === "flagged" ? " proposal-flagged" : ""}`}
               aria-label={`Proposal ${p.id}`}
             >
-              <div className="proposal-header">
-                <div className="proposal-id-group">
-                  <span className={`doc-tag doc-tag-${p.document}`}>
-                    {p.document === "resume" ? "Resume" : "LinkedIn"}
+              <div className="proposal-head">
+                <span className="proposal-doc">
+                  {p.document === "resume" ? "Resume" : "LinkedIn"}
+                </span>
+                <span className="proposal-target" title={p.id}>
+                  {targetName(p.target)}
+                </span>
+                {p.status === "flagged" ? (
+                  <span className="verdict verdict-flagged">
+                    <IconAlert width={14} height={14} aria-hidden="true" />
+                    Critic Flagged
                   </span>
-                  <code className="target-code">{p.target}</code>
-                  {p.status === "flagged" ? (
-                    <span className="critic-badge critic-flagged">
-                      <IconAlert width={13} height={13} />
-                      Critic Flagged
-                    </span>
-                  ) : (
-                    <span className="critic-badge critic-ok">
-                      <IconCheck width={13} height={13} />
-                      Critic Verified
-                    </span>
-                  )}
-                </div>
-
-                <div className="decision-controls" role="group" aria-label={`Decision for ${p.id}`}>
+                ) : (
+                  <span className="verdict">
+                    <IconCheck width={14} height={14} aria-hidden="true" />
+                    Passed the critic
+                  </span>
+                )}
+                {onOpenStaff ? (
                   <button
                     type="button"
-                    className={`decision-btn ${current.action === "accept" ? "selected-accept" : ""}`}
-                    disabled={!isReviewPending || submitting}
-                    onClick={() => setProposalAction(p, "accept")}
+                    className="text-link proposal-source"
+                    onClick={() => onOpenStaff(writer)}
                   >
-                    Accept
+                    Written by the {p.document === "resume" ? "resume" : "LinkedIn"} writer
                   </button>
-                  <button
-                    type="button"
-                    className={`decision-btn ${current.action === "edit" ? "selected-edit" : ""}`}
-                    disabled={!isReviewPending || submitting}
-                    onClick={() => setProposalAction(p, "edit")}
-                  >
-                    Edit
-                  </button>
-                  <button
-                    type="button"
-                    className={`decision-btn ${current.action === "reject" ? "selected-reject" : ""}`}
-                    disabled={!isReviewPending || submitting}
-                    onClick={() => setProposalAction(p, "reject")}
-                  >
-                    Reject
-                  </button>
+                ) : null}
+                <div className="decision" role="radiogroup" aria-label={`Decision for ${p.id}`}>
+                  {ACTIONS.map((a) => (
+                    <button
+                      key={a.id}
+                      type="button"
+                      role="radio"
+                      aria-checked={current.action === a.id}
+                      className={`decision-opt decision-${a.id}`}
+                      disabled={locked}
+                      onClick={() => setProposalAction(p, a.id)}
+                    >
+                      {a.label}
+                    </button>
+                  ))}
                 </div>
               </div>
 
-              {p.issues.length > 0 ? (
-                <div className="critic-issues-box" role="note">
-                  <IconAlert width={15} height={15} />
-                  <ul>
-                    {p.issues.map((issue, idx) => (
-                      <li key={idx}>{issue}</li>
-                    ))}
-                  </ul>
-                </div>
+              {p.issues.length ? (
+                <ul className="issues" aria-label="The critic's concerns">
+                  {p.issues.map((issue, i) => (
+                    <li key={i}>{issue}</li>
+                  ))}
+                </ul>
               ) : null}
 
-              <div className="diff-columns">
-                <div className="diff-pane diff-original">
-                  <div className="diff-pane-label">Original Source</div>
-                  <p className="diff-text">{p.original || "— (New addition)"}</p>
+              <div className="diff">
+                <div className="diff-col">
+                  <h3 className="diff-label">Your original</h3>
+                  <p className="diff-text">{p.original || "New line: nothing here before."}</p>
                 </div>
-
-                <div className="diff-pane diff-proposed">
-                  <div className="diff-pane-label">
-                    <span>Proposed Grounded Rewrite</span>
-                    {p.placeholders.length > 0 ? (
-                      <span className="placeholder-hint">Contains {p.placeholders.join(", ")}</span>
+                <div className="diff-col diff-new">
+                  <h3 className="diff-label">
+                    Rewrite
+                    {p.placeholders.length ? (
+                      <span className="diff-hint"> · needs {p.placeholders.join(", ")}</span>
                     ) : null}
-                  </div>
+                  </h3>
                   {current.action === "edit" ? (
                     <textarea
                       aria-label={`Edit text for ${p.id}`}
-                      className="input-textarea edit-proposal-textarea"
+                      className="field diff-edit"
                       rows={4}
-                      disabled={!isReviewPending || submitting}
+                      disabled={locked}
                       value={current.text}
                       onChange={(e) => setProposalEditText(p, e.target.value)}
                     />
@@ -324,24 +284,22 @@ export function ReviewPanel({
                 </div>
               </div>
 
-              <div className="proposal-footer">
-                <p className="proposal-rationale">
-                  <strong>Why:</strong> {p.rationale}
-                </p>
-                {p.keywords.length > 0 ? (
-                  <div className="pill-wrap">
-                    {p.keywords.map((kw) => (
-                      <span key={kw} className="kw-pill kw-matched">
-                        + {kw}
-                      </span>
-                    ))}
-                  </div>
-                ) : null}
-              </div>
-            </article>
+              <p className="why">
+                <strong>Why:</strong> {p.rationale}
+              </p>
+              {p.keywords.length ? (
+                <div className="chips" aria-label="Keywords this rewrite covers">
+                  {p.keywords.map((kw) => (
+                    <span key={kw} className="chip">
+                      {kw}
+                    </span>
+                  ))}
+                </div>
+              ) : null}
+            </li>
           );
         })}
-      </div>
+      </ol>
     </section>
   );
 }

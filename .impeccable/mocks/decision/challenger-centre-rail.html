@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Centre-Rail — Agentic Resume</title>
+<link href="https://fonts.googleapis.com/css2?family=Libre+Caslon+Text:wght@400;700&family=Archivo:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+:root{--bone:#ecebe4;--ink:#111;--rub:#a32d17}
+*{box-sizing:border-box;margin:0;padding:0}
+body{width:1440px;height:900px;overflow:hidden;background:var(--bone);color:var(--ink);font:14px/1.5 Archivo,system-ui,sans-serif}
+header{height:56px;border-bottom:1px solid var(--ink);display:flex;align-items:center;gap:28px;padding:0 32px}
+.mark{font-weight:800;font-size:17px}.role{font-weight:600}
+nav{margin-left:auto;display:flex;gap:18px}nav a{color:var(--ink);text-decoration:none;font-weight:600}
+nav a.on{border-bottom:2px solid var(--rub)}
+main{display:grid;grid-template-columns:300px 1fr 300px;height:844px}
+.margin{padding:28px 24px;font-size:13px}
+.margin h2{font-variant:small-caps;letter-spacing:.06em;font-size:15px;font-weight:600;margin-bottom:10px}
+.app{display:grid;grid-template-columns:52px 1fr 48px;gap:6px;padding:7px 0;border-bottom:1px solid rgba(17,17,17,.25)}
+.app .k{color:var(--rub);font-weight:800}
+.block{padding:28px 0;display:grid;grid-template-columns:1fr 64px 1fr;font-family:"Libre Caslon Text",Georgia,serif;font-size:16px;line-height:1.55}
+.col h3{font-family:Archivo;font-variant:small-caps;font-size:14px;letter-spacing:.06em;margin-bottom:12px}
+.col p{margin-bottom:22px;min-height:96px}
+.rail{border-left:1px solid var(--ink);border-right:1px solid var(--ink);display:flex;flex-direction:column;align-items:center;padding-top:34px;gap:0}
+.key{height:118px;display:flex;flex-direction:column;align-items:center;gap:8px;font-family:Archivo;font-weight:800;color:var(--rub);font-size:13px}
+.det{width:20px;height:20px;border:1px solid var(--ink)}
+.det.on{background:var(--ink)}
+.det.no{background:linear-gradient(to top right,transparent 46%,var(--ink) 47% 53%,transparent 54%)}
+.det.focus{outline:1px solid var(--rub);outline-offset:3px}
+.col.l{padding-right:22px}.col.r{padding-left:22px}
+.tk{color:var(--rub);font-weight:700}
+.score{font-family:"Libre Caslon Text";font-size:54px;line-height:1}
+button{margin-top:18px;width:100%;background:var(--ink);color:var(--bone);border:0;padding:12px;font:800 14px Archivo}
+</style></head><body>
+<header><div class="mark">Agentic Resume</div><div class="role">Staff Distributed Systems Engineer · VelaStream Cloud</div>
+<nav><a href="#">Run</a><a class="on" href="#">Review</a><a href="#">Export</a></nav></header>
+<main>
+<aside class="margin"><h2>Apparatus: the run</h2>
+<div class="app"><span class="k">A</span><span>Assistant brief</span><span>0:09</span></div>
+<div class="app"><span class="k">I</span><span>Intake</span><span>0:14</span></div>
+<div class="app"><span class="k">J</span><span>Job posting</span><span>0:33</span></div>
+<div class="app"><span class="k">C</span><span>Company</span><span>0:42</span></div>
+<div class="app"><span class="k">M</span><span>Market</span><span>0:29</span></div>
+<div class="app"><span class="k">L</span><span>LinkedIn audit</span><span>0:18</span></div>
+<div class="app"><span class="k">G</span><span>Gap analysis</span><span>0:14</span></div>
+<div class="app"><span class="k">W</span><span>Writers ×2</span><span>0:47</span></div>
+<div class="app"><span class="k">K</span><span>Critic, 2 sent back</span><span>0:19</span></div>
+</aside>
+<section class="block">
+<div class="col l"><h3>Original</h3>
+<p>Senior Backend Engineer with 7 years of experience building data pipelines and API services.</p>
+<p>Built ingestion services in Python and FastAPI processing 45,000 events/sec across 18 regional clusters.</p>
+<p>Worked on monitoring.</p>
+<p>Engineer at Northwind.</p></div>
+<div class="rail">
+<div class="key">S<div class="det on"></div></div>
+<div class="key">E1<div class="det focus"></div></div>
+<div class="key">E2<div class="det no"></div></div>
+<div class="key">LH<div class="det"></div></div></div>
+<div class="col r"><h3>Rewrite</h3>
+<p>Distributed systems engineer with 7 years scaling event streaming and resilient APIs in Python and Go.</p>
+<p>Architected multi-region ingestion sustaining 45,000 events/sec across 18 clusters with <span class="tk">[X]%</span> p99 availability.</p>
+<p>Introduced OpenTelemetry tracing across the ingestion path.</p>
+<p>Distributed systems engineer · event streaming · Go & Kafka.</p></div>
+</section>
+<aside class="margin"><h2>Notes</h2>
+<div class="score">72</div><div style="font-weight:600;margin-bottom:16px">match / 100 · keywords 58%</div>
+<p><b style="color:var(--rub)">E1.</b> Critic sent this back once: the first draft claimed a 99.99% SLA. Fill in [X] with your real figure.</p>
+<p style="margin-top:10px"><b style="color:var(--rub)">E2.</b> Missing keyword covered: OpenTelemetry.</p>
+<button>Submit 4 decisions</button>
+</aside>
+</main></body></html>
