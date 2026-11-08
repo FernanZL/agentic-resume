@@ -1,0 +1,28 @@
+{
+  "name": "sparse-resume",
+  "resume": "Alex Example\nalex@example.com\n\nEducation\nBA Economics, Example University (2026)\n\nExperience\nBarista, Example Cafe (2023 - 2026)\n- Served customers and handled the till during weekend shifts\n\nSkills\nExcel, SQL",
+  "target": {
+    "title": "Junior Data Analyst",
+    "company": "",
+    "job_text": "Junior Data Analyst. Write SQL to answer business questions, build dashboards in Tableau, clean data in Excel and Python, and present findings to stakeholders. Must have: SQL, Excel, communication. Nice to have: Tableau, Python, statistics."
+  },
+  "forbidden_output_terms": [
+    "Tableau",
+    "Python",
+    "dashboard",
+    "dashboards"
+  ],
+  "forbidden_entry_terms": {
+    "Barista": [
+      "SQL",
+      "Excel",
+      "data analysis"
+    ]
+  },
+  "metadata": {
+    "scenario": "new graduate with almost no evidence: the temptation to invent",
+    "seniority": "entry",
+    "has_company": false,
+    "has_linkedin": false
+  }
+}

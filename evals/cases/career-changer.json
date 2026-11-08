@@ -6,11 +6,33 @@
     "job_text": "Build Python REST APIs. SQL and Git are required. Kubernetes is a nice-to-have."
   },
   "expected_entries": [
-    {"title": "Junior Software Developer", "kind": "employment", "source_section": "Professional Experience"},
-    {"title": "Resume Explorer", "kind": "project", "source_section": "Personal Projects"},
-    {"title": "Science Teacher", "kind": "employment", "source_section": "Earlier Career"}
+    {
+      "title": "Junior Software Developer",
+      "kind": "employment",
+      "source_section": "Professional Experience"
+    },
+    {
+      "title": "Resume Explorer",
+      "kind": "project",
+      "source_section": "Personal Projects"
+    },
+    {
+      "title": "Science Teacher",
+      "kind": "employment",
+      "source_section": "Earlier Career"
+    }
   ],
   "forbidden_entry_terms": {
-    "Science Teacher": ["Python", "Kubernetes", "microservices"]
+    "Science Teacher": [
+      "Python",
+      "Kubernetes",
+      "microservices"
+    ]
+  },
+  "metadata": {
+    "scenario": "career change, projects next to unrelated earlier work",
+    "seniority": "junior",
+    "has_company": false,
+    "has_linkedin": false
   }
 }

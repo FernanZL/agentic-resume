@@ -204,8 +204,12 @@ class Script:
         asked = json.loads(messages[-1].content.split("\n", 1)[1])
         return call("Verdicts", verdicts=[{"proposal_id": p["id"], "ok": True} for p in asked])
 
-    def judge(self, messages):
-        return call("Rating", score=4, reason="Clearer and better targeted.")
+    def faithfulness(self, messages):
+        asked = json.loads(messages[-1].content.split("PROPOSALS\n", 1)[1])
+        return call("Faithfulness", checks=[{"proposal_id": p["id"]} for p in asked])
+
+    def tailoring(self, messages):
+        return call("Tailoring", score=4, reason="Clearer and better targeted.")
 
     def writer_single(self, messages):
         return call(
@@ -226,7 +230,8 @@ ROLES = {
     "resume_writer": "Rewrite parts of the candidate's resume",
     "linkedin_writer": "Write LinkedIn improvements",
     "critic": "You are the critic",
-    "judge": "You are a senior recruiter",
+    "faithfulness": "You are a fact-checker for resume rewrites",
+    "tailoring": "You are a senior recruiter for the TARGET role",
 }
 
 

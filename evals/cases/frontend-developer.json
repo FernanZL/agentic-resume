@@ -7,5 +7,11 @@
     "company": "",
     "job_url": "",
     "job_text": "Senior Frontend Engineer. Lead the architecture of our React/TypeScript web platform, own performance and accessibility (WCAG 2.2), build a design system with Storybook, set up testing with Playwright and Vitest, and mentor mid-level engineers. Must have: React, TypeScript, performance optimization, accessibility, testing. Nice to have: Next.js, GraphQL."
+  },
+  "metadata": {
+    "scenario": "step up to senior",
+    "seniority": "mid to senior",
+    "has_company": false,
+    "has_linkedin": true
   }
 }

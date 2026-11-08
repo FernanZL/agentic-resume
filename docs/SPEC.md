@@ -100,7 +100,7 @@ backend/   main.py, routers/{documents,sessions,events,exports}.py, database.py,
 agent/     graph.py (session graph), analysis.py (subgraph), nodes/, tools/{web_search,fetch_url,ats}.py,
            schemas.py, llm.py, checkpoints.py, prompts/*.md
 web/       React + Vite + TS: chat panel · live agent timeline · proposal diff review · export/print view
-evals/     golden resume/JD pairs; metrics: keyword coverage delta, critic fabrication rate, LLM-judge score
+evals/     golden cases (Langfuse dataset); code quality gates + faithfulness/tailoring judges on another model family; 3 repeats (see docs/portfolio/evals/)
 docs/      SPEC, TECH_STACK, CODE_STANDARDS, PROCESS, STATUS  (+ AGENTS.md / CLAUDE.md)
 Dockerfile (multi-stage: node build → python/uv slim), docker-compose.yml, render.yaml
 ```

@@ -1,6 +1,6 @@
 # Product review: resume fidelity, conversation and LinkedIn
 
-Date: 2026-11-08. Status: implemented locally; provider quality baseline remains to be measured.
+Date: 2026-11-08. Status: implemented locally; provider quality baseline measured the same day (see `docs/portfolio/evals/README.md`).
 
 Implementation followed this review: typed source sections, preserved exports, review-time advisory chat with explicit draft loading, versioned review/amendment, confirmed reruns, bounded LinkedIn fallback research, field-specific copy guidance, and regression gates. Argon implemented the frontend through Herdr; Opus independently reviewed the backend and checked the fixes. The coordinator completed integration and verification. Both worker panes were closed when finished.
 

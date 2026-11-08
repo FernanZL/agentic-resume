@@ -95,10 +95,16 @@ class JobAnalysis(BaseModel):
 
     summary: str
     seniority: str = ""
-    must_have: list[str] = []
+    must_have: list[str] = Field(
+        [], description="Required skills, tools or methods, each a short term (1-3 words)"
+    )
     nice_to_have: list[str] = []
     responsibilities: list[str] = []
-    keywords: list[str] = Field([], description="Exact terms an ATS would match on")
+    keywords: list[str] = Field(
+        [],
+        description="Exact terms an ATS would match on, each 1-3 words: skills, tools, "
+        "methods, titles. Never sentences or years-of-experience requirements",
+    )
     sources: list[Source] = []
 
 

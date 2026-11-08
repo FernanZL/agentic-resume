@@ -42,7 +42,8 @@ NODES = {
 GOALS = {
     ReportKind.JOB: (
         "work out exactly what this role asks for: must-have and nice-to-have skills, "
-        "seniority, responsibilities, and the exact keywords an ATS would match on."
+        "seniority, responsibilities, and the exact keywords an ATS would match on (short "
+        "terms such as 'Kafka' or 'data modeling'; years of experience belong in seniority)."
     ),
     ReportKind.COMPANY: (
         "brief the writers on the company: what it builds, its stack, its values and the "

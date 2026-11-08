@@ -6,5 +6,11 @@
     "title": "Senior Data Engineer",
     "company": "Fictional Streams Inc",
     "job_text": "Senior Data Engineer. You will design streaming and batch pipelines with Kafka, Spark and dbt on AWS, own data quality and observability, mentor engineers, and partner with ML teams. Must have: Python, SQL, Spark, Kafka, data modeling, Airflow or Dagster. Nice to have: dbt, Terraform, Kubernetes."
+  },
+  "metadata": {
+    "scenario": "step up to senior with a real skills gap",
+    "seniority": "mid to senior",
+    "has_company": true,
+    "has_linkedin": true
   }
 }

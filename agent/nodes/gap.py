@@ -2,6 +2,7 @@
 recruiter's rubric from the model on what code can't see."""
 
 import json
+import re
 
 from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel, Field
@@ -30,9 +31,37 @@ class Rubric(BaseModel):
     )
 
 
+# A keyword is a short term an ATS matches (a skill, tool, method or title). Longer items are
+# requirement sentences ("2+ years product management experience"): no resume contains them
+# verbatim, so as keywords they could never be matched and would only push rewrites to
+# echo the posting.
+MAX_KEYWORD_WORDS = 4
+DURATION = re.compile(r"\d+\s*\+?\s*(?:years?|yrs?)\b", re.IGNORECASE)
+LEAD_IN = re.compile(
+    r"^(?:(?:hands-on|proven|strong|solid)\s+)?"
+    r"(?:experience|proficiency|familiarity|knowledge|expertise)\s+(?:with|in|of)\s+",
+    re.IGNORECASE,
+)
+ALTERNATIVES = re.compile(r"\s+or\s+|\s+/\s+", re.IGNORECASE)  # "CI/CD" stays whole
+
+
+def keyword_terms(term: str) -> list[str]:
+    """A posting's term as matchable keywords: alternatives split ('Airflow or Dagster'),
+    a lead-in dropped ('experience with B2B customers'), and requirement sentences and
+    durations left out."""
+    if DURATION.search(term):
+        return []
+    found = []
+    for part in ALTERNATIVES.split(LEAD_IN.sub("", term.strip())):
+        part = part.strip(" .,;:")
+        if part and len(part.split()) <= MAX_KEYWORD_WORDS:
+            found.append(part)
+    return found
+
+
 def job_keywords(reports: dict[str, Report]) -> list[str]:
     """The terms to match: the posting's keywords and must-haves, else the market's
-    in-demand skills; de-duplicated, in order."""
+    in-demand skills; as short keywords (keyword_terms), de-duplicated, in order."""
     job = reports.get("job")
     terms: list[str] = []
     if job and job.job:
@@ -41,7 +70,8 @@ def job_keywords(reports: dict[str, Report]) -> list[str]:
         terms = list(market.market.in_demand_skills)
     seen: dict[str, str] = {}
     for term in terms:
-        seen.setdefault(ats.normalize(term), term)
+        for keyword in keyword_terms(term):
+            seen.setdefault(ats.normalize(keyword), keyword)
     return list(seen.values())
 
 

@@ -6,5 +6,11 @@
     "title": "Product Manager, B2B SaaS",
     "company": "",
     "job_text": "Product Manager for a B2B SaaS workflow product. Own discovery, prioritization and delivery for a product area; define success metrics and run experiments; work closely with design and engineering; communicate roadmap to stakeholders. Must have: 2+ years product management, data-informed decision making, SQL, experience with B2B customers."
+  },
+  "metadata": {
+    "scenario": "same function, new domain (health to B2B SaaS)",
+    "seniority": "associate to mid",
+    "has_company": false,
+    "has_linkedin": false
   }
 }

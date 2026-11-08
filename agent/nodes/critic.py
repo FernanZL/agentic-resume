@@ -27,6 +27,21 @@ AGAIN = "Needs another pass."
 REPLACED = (
     "Numbers we couldn't find in your documents were replaced with [X]: fill in the real ones."
 )
+# Copy that talks about the posting instead of the candidate: the writer's reasoning leaking
+# into the text ("…Airflow, the Airflow option in the role's Airflow or Dagster requirement").
+META = re.compile(
+    r"\b(?:the|this)\s+(?:role|posting|position|job(?:\s+(?:ad|description|posting))?)['’]s\b"
+    r"|\b(?:the|this)\s+(?:job\s+(?:description|posting|ad)|posting)\b"
+    r"|\b(?:the|this)\s+(?:role|position|posting)\s+(?:requires|asks\s+for|calls\s+for)\b"
+    r"|\brequirements?\s+(?:of|for|in)\s+(?:the|this)\s+(?:role|position|posting|job)\b",
+    re.IGNORECASE,
+)
+META_ISSUE = (
+    "This text talks about the job posting instead of the candidate: keep the reasoning in "
+    "the rationale."
+)
+# A summary sharing this many consecutive words with a bullet is a copy, not a summary.
+COPIED_WORDS = 6
 
 
 class Verdict(BaseModel):
@@ -74,9 +89,48 @@ def attribution_issues(proposal: Proposal, state: AnalysisState) -> list[str]:
     return []
 
 
+def meta_issues(proposal: Proposal) -> list[str]:
+    return [META_ISSUE] if META.search(proposal.proposed) else []
+
+
+def _words(text: str) -> list[str]:
+    return re.findall(r"[\w+#]+", text.lower())
+
+
+def _runs(words: list[str], n: int) -> set[tuple[str, ...]]:
+    return {tuple(words[i : i + n]) for i in range(len(words) - n + 1)}
+
+
+def copied_bullets(summary: str, bullets: list[str]) -> list[str]:
+    """The bullets the summary shares COPIED_WORDS consecutive words with."""
+    runs = _runs(_words(summary), COPIED_WORDS)
+    return [b for b in bullets if runs & _runs(_words(b), COPIED_WORDS)]
+
+
+def repetition_issues(proposal: Proposal, state: AnalysisState) -> list[str]:
+    """A resume summary must summarise, not repeat the bullets right below it (the
+    original ones or the proposed rewrites)."""
+    if proposal.document is not Document.RESUME or proposal.target != "summary":
+        return []
+    bullets = [b.text for role in state["profile"].experience for b in role.bullets]
+    bullets += [
+        p.proposed
+        for p in (state.get("proposals") or {}).values()
+        if p and p.document is Document.RESUME and ("." in p.target or p.target.startswith("new:"))
+    ]
+    copied = copied_bullets(proposal.proposed, bullets)
+    if not copied:
+        return []
+    return [
+        f"The summary repeats a bullet ('{copied[0]}'): sum up the strongest evidence in new "
+        "words instead of restating it."
+    ]
+
+
 def deterministic_issues(proposal: Proposal, state: AnalysisState) -> list[str]:
-    """Apply numerical, attribution and copy-format rules independently of model verdicts."""
+    """Apply numerical, attribution and copy rules independently of model verdicts."""
     issues = number_issues(proposal, sources(state)) + attribution_issues(proposal, state)
+    issues += meta_issues(proposal) + repetition_issues(proposal, state)
     if proposal.document is Document.LINKEDIN:
         issues += copy_issues(proposal.target, proposal.proposed, state["profile"])
         issues += description_issues(proposal, state)
@@ -144,10 +198,29 @@ def keyword_issues(state: AnalysisState, checking: dict[str, Proposal]) -> dict[
         {pid: Decision(action=Action.ACCEPT) for pid in proposals},
     )
     missing = ats.keyword_coverage(profile_markdown(final.resume), expected).missing
-    if not missing:
+    carrier = keyword_carrier(checking)
+    if not missing or carrier is None:
         return {}
-    issue = "The proposed resume omits supported keywords: " + ", ".join(missing)
-    return {pid: [issue] for pid, p in checking.items() if p.document is Document.RESUME}
+    issue = (
+        "The proposed resume omits supported keywords: "
+        + ", ".join(missing)
+        + ". Use each once, here, where the evidence supports it; don't add it to other bullets."
+    )
+    return {carrier: [issue]}
+
+
+KEYWORD_CARRIERS = ("summary", "skills", "headline")
+
+
+def keyword_carrier(checking: dict[str, Proposal]) -> str | None:
+    """The one resume proposal that is asked for the missing keywords: the summary, else
+    the skills, else the headline, else any. Asking every bullet made the writer append
+    the same keywords to all of them."""
+    resume = {p.target: pid for pid, p in checking.items() if p.document is Document.RESUME}
+    for target in KEYWORD_CARRIERS:
+        if target in resume:
+            return resume[target]
+    return next(iter(resume.values()), None)
 
 
 async def judge(
