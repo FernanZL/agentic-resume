@@ -13,11 +13,14 @@ from langgraph.types import Command, Overwrite
 from agent.events import emit, step
 from agent.llm import Models, structured
 from agent.nodes.critic import judge, number_issues, sources, with_placeholders
+from agent.nodes.gap import job_keywords
 from agent.nodes.writers import NODES as WRITERS
 from agent.nodes.writers import Draft, to_proposals
 from agent.prompts import prompt
-from agent.schemas import Action, Decision, ProposalStatus
+from agent.render import apply_decisions, profile_markdown
+from agent.schemas import Action, ProposalStatus
 from agent.state import SessionState
+from agent.tools import ats
 from agent.tools.fetch_url import untrusted
 
 # The most model calls the concierge makes for one user message.
@@ -41,8 +44,17 @@ def analysis_just_finished(state: SessionState) -> bool:
     message, and the analysis is done (not a later tool's result)."""
     messages = state.get("messages") or []
     last = messages[-1] if messages else None
+    if (
+        state.get("analyzed")
+        and isinstance(last, HumanMessage)
+        and last.text.startswith("Confirmed a fresh analysis for ")
+    ):
+        return True
     return bool(
-        state.get("analyzed") and isinstance(last, ToolMessage) and last.name == "request_analysis"
+        state.get("analyzed")
+        and isinstance(last, ToolMessage)
+        and last.name == "request_analysis"
+        and last.text.startswith("Analysis started for ")
     )
 
 
@@ -72,6 +84,14 @@ def status(state: SessionState) -> str:
             "they were ignored. Tell the user."
         )
     lines += _analysis_status(state)
+    if profile := state.get("profile"):
+        lines.append(
+            "- Source entries: "
+            + "; ".join(
+                f"{r.id}: {r.title} ({r.organization or r.kind}, {r.source_section or r.kind})"
+                for r in profile.experience
+            )
+        )
     return "\n".join(lines)
 
 
@@ -83,7 +103,8 @@ def _analysis_status(state: SessionState) -> list[str]:
     lines += [f"- {kind} research failed: {r.error}" for kind, r in reports.items() if r.error]
     if gap := state.get("gap"):
         lines.append(
-            f"- Match score {gap.score}/100, keyword coverage {gap.keyword_coverage:.0%}, "
+            f"- Original resume match score {gap.score}/100, "
+            f"keyword coverage {gap.keyword_coverage:.0%}, "
             f"missing: {', '.join(gap.missing_keywords[:8]) or 'none'}"
         )
     proposals = [p for p in (state.get("proposals") or {}).values() if p]
@@ -94,6 +115,90 @@ def _analysis_status(state: SessionState) -> list[str]:
         counts = {a.value: sum(d.action is a for d in decisions.values()) for a in Action}
         lines.append(f"- Review done: {counts}. The user can export now.")
     return lines
+
+
+def current_documents(state: SessionState) -> str:
+    """Render the saved reviewed documents and their measured keyword coverage."""
+    profile = state.get("profile")
+    if not profile:
+        return "No parsed resume yet."
+    proposals = {pid: p for pid, p in (state.get("proposals") or {}).items() if p}
+    final = apply_decisions(profile, state.get("linkedin"), proposals, state.get("decisions") or {})
+    coverage = ats.keyword_coverage(
+        profile_markdown(final.resume), job_keywords(state.get("reports") or {})
+    )
+    return untrusted(
+        json.dumps(
+            {
+                "reviewed": bool(state.get("analyzed")),
+                "documents": final.model_dump(mode="json"),
+                "current_keyword_coverage": coverage.model_dump(),
+                "proposals": [p.model_dump(mode="json") for p in proposals.values()],
+                "decisions": {
+                    pid: d.model_dump(mode="json")
+                    for pid, d in (state.get("decisions") or {}).items()
+                },
+            }
+        ),
+        "saved session documents and decisions",
+    )
+
+
+def rerun_needs_permission(state: SessionState) -> bool:
+    """Require a user-authored command before a tool can replace saved analysis results."""
+    messages = state.get("messages") or []
+    latest_index = next(
+        (i for i in range(len(messages) - 1, -1, -1) if isinstance(messages[i], HumanMessage)), -1
+    )
+    latest = messages[latest_index].text if latest_index >= 0 else ""
+    consumed = any(
+        isinstance(m, ToolMessage)
+        and m.name == "request_analysis"
+        and m.text.startswith("Analysis started for ")
+        for m in messages[latest_index + 1 :]
+    )
+    has_results = (
+        state.get("analysis_started")
+        or state.get("profile")
+        or state.get("analyzed")
+        or state.get("reports")
+        or state.get("proposals")
+    )
+    return bool(
+        has_results and (consumed or latest.strip().split(maxsplit=1)[0:1] != ["/reanalyze"])
+    )
+
+
+@tool
+def get_documents(state: Annotated[dict, InjectedState]) -> str:
+    """Read the current reviewed resume, LinkedIn copy, proposal ids and actual keyword
+    coverage. Use this before answering questions about missing keywords or the export."""
+    return current_documents(state)
+
+
+@tool
+def get_report(
+    kind: Literal["job", "company", "market", "linkedin", "gap"],
+    state: Annotated[dict, InjectedState],
+) -> str:
+    """Read one research report, or the gap analysis, in full."""
+    found = state.get("gap") if kind == "gap" else (state.get("reports") or {}).get(kind)
+    return found.model_dump_json(exclude_none=True) if found else f"No {kind} report yet."
+
+
+@tool
+def explain_proposal(proposal_id: str, state: Annotated[dict, InjectedState]) -> str:
+    """Read one proposal in full, with the critic's issues and the user's decision."""
+    proposal = (state.get("proposals") or {}).get(proposal_id)
+    if not proposal:
+        return "There is no such proposal. Ids look like 'resume:exp0.b1' or 'linkedin:about'."
+    decision = (state.get("decisions") or {}).get(proposal_id)
+    return json.dumps(
+        {
+            "proposal": proposal.model_dump(mode="json"),
+            "decision": decision.model_dump(mode="json") if decision else None,
+        }
+    )
 
 
 def make_tools(models: Models) -> list[BaseTool]:
@@ -108,21 +213,31 @@ def make_tools(models: Models) -> list[BaseTool]:
         job_url: str = "",
         job_text: str = "",
         notes: str = "",
-    ) -> Command:
+    ) -> Command | str:
         """Run the full analysis for this target role. Leave a field empty to keep what is
-        already known. job_url and job_text only when the user wrote them in this chat,
+        already known. After a completed analysis, the user's latest message must start
+        with /reanalyze to authorize replacing it. job_url and job_text only when the user
+        wrote them in this chat,
         copied exactly. Starts the research team; previous results are replaced."""
+        if rerun_needs_permission(state):
+            return (
+                "The saved analysis was preserved. Answer this follow-up using get_documents, "
+                "get_report or explain_proposal; use revise_proposal for a targeted change. "
+                "Only if the user wants a fresh analysis, explain that it replaces the saved "
+                "results and ask them to send /reanalyze followed by the new target."
+            )
         update = {
             "title": title,
             "company": company,
             "job_url": from_user("job_url", job_url, state),
             "job_text": from_user("job_text", job_text, state),
-            "notes": notes,
+            "notes": from_user("notes", notes, state),
         }
         target = state["target"].model_copy(update={k: v for k, v in update.items() if v})
         return Command(
             update={
                 "route": "analyze",
+                "analysis_started": True,
                 "target": target,
                 "reports": Overwrite({}),
                 "proposals": Overwrite({}),
@@ -130,6 +245,7 @@ def make_tools(models: Models) -> list[BaseTool]:
                 "critique": {},
                 "critique_rounds": 0,
                 "gap": None,
+                "keyword_evidence": {},
                 "analyzed": False,
                 "messages": [
                     ToolMessage(
@@ -142,37 +258,14 @@ def make_tools(models: Models) -> list[BaseTool]:
         )
 
     @tool
-    def get_report(
-        kind: Literal["job", "company", "market", "linkedin", "gap"],
-        state: Annotated[dict, InjectedState],
-    ) -> str:
-        """Read one research report, or the gap analysis, in full."""
-        found = state.get("gap") if kind == "gap" else (state.get("reports") or {}).get(kind)
-        return found.model_dump_json(exclude_none=True) if found else f"No {kind} report yet."
-
-    @tool
-    def explain_proposal(proposal_id: str, state: Annotated[dict, InjectedState]) -> str:
-        """Read one proposal in full, with the critic's issues and the user's decision."""
-        proposal = (state.get("proposals") or {}).get(proposal_id)
-        if not proposal:
-            return "There is no such proposal. Ids look like 'resume:exp0.b1' or 'linkedin:about'."
-        decision = (state.get("decisions") or {}).get(proposal_id)
-        return json.dumps(
-            {
-                "proposal": proposal.model_dump(mode="json"),
-                "decision": decision.model_dump(mode="json") if decision else None,
-            }
-        )
-
-    @tool
     async def revise_proposal(
         proposal_id: str,
         instruction: str,
         state: Annotated[dict, InjectedState],
         tool_call_id: Annotated[str, InjectedToolCallId],
     ) -> Command | str:
-        """Rewrite one proposal following the user's instruction (after the review). The
-        new version is fact-checked and becomes the accepted text."""
+        """Draft a checked rewrite of an existing proposal. Nothing is applied automatically;
+        the user must load it into Edit and explicitly review it."""
         proposal = (state.get("proposals") or {}).get(proposal_id)
         if not proposal:
             return "There is no such proposal."
@@ -183,6 +276,8 @@ def make_tools(models: Models) -> list[BaseTool]:
             [
                 SystemMessage(prompt(WRITERS[proposal.document])),
                 HumanMessage(untrusted(state["profile"].model_dump_json(), "resume (structured)")),
+                HumanMessage(untrusted(state["documents"]["resume"], "supplied resume")),
+                HumanMessage(current_documents(state)),
                 HumanMessage(
                     json.dumps(
                         {"current": proposal.model_dump(mode="json"), "instruction": instruction},
@@ -206,18 +301,23 @@ def make_tools(models: Models) -> list[BaseTool]:
             )
         return Command(
             update={
-                "proposals": {proposal_id: revised},
-                "decisions": {proposal_id: Decision(action=Action.ACCEPT)},
                 "messages": [
                     ToolMessage(
-                        json.dumps({"revised": revised.proposed, "issues": issues}),
+                        json.dumps(
+                            {
+                                "draft": revised.proposed,
+                                "issues": issues,
+                                "applied": False,
+                                "instruction": "Load into Edit, then review explicitly.",
+                            }
+                        ),
                         tool_call_id=tool_call_id,
                     )
                 ],
             }
         )
 
-    return [request_analysis, get_report, explain_proposal, revise_proposal]
+    return [request_analysis, get_documents, get_report, explain_proposal, revise_proposal]
 
 
 def calls_this_turn(state: SessionState) -> int:

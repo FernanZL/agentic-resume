@@ -3,8 +3,9 @@ one place that knows how a proposal's target maps onto a profile."""
 
 import re
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
+from agent.linkedin_guidance import guidance_for
 from agent.schemas import (
     Action,
     Bullet,
@@ -12,15 +13,20 @@ from agent.schemas import (
     Decision,
     Document,
     Experience,
+    LinkedInGuidance,
     LinkedInProfile,
     Proposal,
 )
+from agent.sections import role_sections
 
 BULLET_ID = re.compile(r"^exp(\d+)\.b(\d+)$")
 NEW_BULLET = re.compile(r"^new:exp(\d+)$")
 ROLE_ID = re.compile(r"^(exp|li)(\d+)$")
 RESUME_SECTIONS = {"summary", "headline", "skills"}
-LINKEDIN_SECTIONS = {"headline", "about"}
+LINKEDIN_SECTIONS = {"headline", "about", "skills"}
+ENTRY_FIELD = re.compile(r"^exp(\d+)\.(title|organization|location|start|end|source_section)$")
+EDUCATION_FIELD = re.compile(r"^edu(\d+)\.(degree|institution|year|details)$")
+LIST_SECTIONS = {"skills", "certifications", "languages", "other"}
 
 
 def assign_ids(profile: CandidateProfile, linkedin: LinkedInProfile | None) -> None:
@@ -54,8 +60,9 @@ def original_of(
 
 
 def _resume_original(target: str, profile: CandidateProfile) -> str | None:
-    if target == "skills":
-        return ", ".join(profile.skills)
+    if target in LIST_SECTIONS:
+        separator = ", " if target == "skills" else "\n"
+        return separator.join(getattr(profile, target))
     if target in RESUME_SECTIONS:
         return getattr(profile, target)
     if match := BULLET_ID.match(target):
@@ -65,6 +72,13 @@ def _resume_original(target: str, profile: CandidateProfile) -> str | None:
         return None
     if match := NEW_BULLET.match(target):
         return "" if int(match.group(1)) < len(profile.experience) else None
+    for pattern, entries in (
+        (ENTRY_FIELD, profile.experience),
+        (EDUCATION_FIELD, profile.education),
+    ):
+        if match := pattern.match(target):
+            index, field = int(match.group(1)), match.group(2)
+            return getattr(entries[index], field) if index < len(entries) else None
     return None
 
 
@@ -72,13 +86,16 @@ def _linkedin_original(
     target: str, profile: CandidateProfile, linkedin: LinkedInProfile | None
 ) -> str | None:
     if target in LINKEDIN_SECTIONS:
-        return getattr(linkedin, target) if linkedin else ""
+        value = getattr(linkedin, target) if linkedin else ""
+        return ", ".join(value) if isinstance(value, list) else value
     if match := ROLE_ID.match(target):
         kind, index = match.group(1), int(match.group(2))
         roles = linkedin.experience if kind == "li" and linkedin else profile.experience
         if kind == "li" and not linkedin:
             return None
-        return role_text(roles[index]) if index < len(roles) else None
+        return (
+            "\n".join(f"- {b.text}" for b in roles[index].bullets) if index < len(roles) else None
+        )
     return None
 
 
@@ -108,14 +125,17 @@ def profile_markdown(profile: CandidateProfile) -> str:
 def _experience_markdown(profile: CandidateProfile) -> list[str]:
     if not profile.experience:
         return []
-    lines = ["", "## Experience"]
-    for role in profile.experience:
-        dates = " – ".join(part for part in (role.start, role.end) if part)
-        where = ", ".join(part for part in (role.organization, role.location) if part)
-        lines += ["", f"### {role.title} — {where}"]
-        if dates:
-            lines.append(f"*{dates}*")
-        lines += [f"- {bullet.text}" for bullet in role.bullets]
+    lines = []
+    for heading, roles in role_sections(profile):
+        lines += ["", f"## {heading}"]
+        for role in roles:
+            dates = " – ".join(part for part in (role.start, role.end) if part)
+            where = ", ".join(part for part in (role.organization, role.location) if part)
+            title = f"{role.title} — {where}" if where else role.title
+            lines += ["", f"### {title}"]
+            if dates:
+                lines.append(f"*{dates}*")
+            lines += [f"- {bullet.text}" for bullet in role.bullets]
     return lines
 
 
@@ -135,6 +155,7 @@ class FinalDocuments(BaseModel):
 
     resume: CandidateProfile
     linkedin: dict[str, str]  # target ('headline', 'about', 'li0'/'exp0') -> text
+    linkedin_guidance: dict[str, LinkedInGuidance] = Field(default_factory=dict)
 
 
 def final_text(proposal: Proposal, decision: Decision | None) -> str | None:
@@ -165,12 +186,17 @@ def apply_decisions(
             copy[proposal.target] = text
         else:
             _apply_to_resume(resume, proposal.target, text)
-    return FinalDocuments(resume=resume, linkedin=copy)
+    guidance = {
+        target: LinkedInGuidance(**guidance_for(target, resume, linkedin)) for target in copy
+    }
+    return FinalDocuments(resume=resume, linkedin=copy, linkedin_guidance=guidance)
 
 
 def _apply_to_resume(resume: CandidateProfile, target: str, text: str) -> None:
-    if target == "skills":
-        resume.skills = [skill.strip() for skill in re.split(r"[,\n•;]", text) if skill.strip()]
+    if target in LIST_SECTIONS:
+        pattern = r"[,\n•;]" if target == "skills" else r"\n"
+        items = [re.sub(r"^[-•]\s+", "", s.strip()) for s in re.split(pattern, text) if s.strip()]
+        setattr(resume, target, items)
     elif target in RESUME_SECTIONS:
         setattr(resume, target, text)
     elif match := BULLET_ID.match(target):
@@ -179,3 +205,12 @@ def _apply_to_resume(resume: CandidateProfile, target: str, text: str) -> None:
     elif match := NEW_BULLET.match(target):
         role = resume.experience[int(match.group(1))]
         role.bullets.append(Bullet(id=f"{role.id}.b{len(role.bullets)}", text=text))
+    else:
+        _apply_field(resume, target, text)
+
+
+def _apply_field(resume: CandidateProfile, target: str, text: str) -> None:
+    """Apply a reviewed entry or education field without changing ids or kinds."""
+    for pattern, entries in ((ENTRY_FIELD, resume.experience), (EDUCATION_FIELD, resume.education)):
+        if match := pattern.match(target):
+            setattr(entries[int(match.group(1))], match.group(2), text)

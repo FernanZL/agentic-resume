@@ -45,8 +45,10 @@ class AnalysisState(TypedDict, total=False):
     profile: CandidateProfile
     linkedin: LinkedInProfile | None
     unsafe: str  # why intake found instructions hidden in the documents, or ""
+    section_warnings: list[str]
     reports: Annotated[dict[str, Report], merge]
     gap: GapReport | None
+    keyword_evidence: dict[str, str]  # missing terms -> exact candidate evidence
     proposals: Annotated[dict[str, Proposal | None], merge]
     critique: dict[str, list[str]]  # proposal id -> issues, from the last critic round
     critique_rounds: int
@@ -58,6 +60,7 @@ class SessionState(AnalysisState, total=False):
     messages: Annotated[list[AnyMessage], add_messages]
     model_calls: Annotated[int, operator.add]
     route: str | None
+    analysis_started: bool
 
 
 @dataclass(frozen=True)

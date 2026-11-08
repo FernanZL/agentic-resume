@@ -88,6 +88,16 @@ model_calls = Table(
     Column("cost", Float, nullable=False),
     Column("created_at", DateTime(timezone=True), nullable=False, index=True),
 )
+advisory_messages = Table(
+    "advisory_messages",
+    metadata,
+    Column("id", String(36), primary_key=True),
+    Column("session_id", String(36), nullable=False, index=True),
+    Column("anchor_id", String(64), nullable=False),
+    Column("role", String(16), nullable=False),
+    Column("content", Text, nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+)
 
 
 def now() -> datetime:
@@ -226,6 +236,53 @@ class Database:
             await connection.execute(
                 update(sessions).where(sessions.c.id == session_id).values(status=status)
             )
+
+    async def set_target(self, session_id: str, target: dict) -> None:
+        """Keep the session's index synchronized with an explicitly changed target."""
+        async with self.engine.begin() as connection:
+            await connection.execute(
+                update(sessions).where(sessions.c.id == session_id).values(target=target)
+            )
+
+    async def add_advisory_turn(
+        self, session_id: str, anchor_id: str, question: str, answer: str
+    ) -> str:
+        """Persist one advisory conversation turn without touching analysis checkpoints."""
+        user_id, reply_id = new_id(), new_id()
+        created = now()
+        async with self.engine.begin() as connection:
+            await connection.execute(
+                insert(advisory_messages),
+                [
+                    {
+                        "id": user_id,
+                        "session_id": session_id,
+                        "anchor_id": anchor_id,
+                        "role": "user",
+                        "content": question,
+                        "created_at": created,
+                    },
+                    {
+                        "id": reply_id,
+                        "session_id": session_id,
+                        "anchor_id": anchor_id,
+                        "role": "assistant",
+                        "content": answer,
+                        "created_at": created + timedelta(microseconds=1),
+                    },
+                ],
+            )
+        return reply_id
+
+    async def advisory_history(self, session_id: str) -> list[dict]:
+        """Read this session's advisory turns in conversation order."""
+        async with self.engine.connect() as connection:
+            rows = await connection.execute(
+                select(advisory_messages)
+                .where(advisory_messages.c.session_id == session_id)
+                .order_by(advisory_messages.c.created_at, advisory_messages.c.id)
+            )
+            return [dict(row) for row in rows.mappings()]
 
     # runs
     async def add_run(self, run_id: str, session_id: str, kind: str) -> None:

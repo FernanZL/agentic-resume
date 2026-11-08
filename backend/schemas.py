@@ -3,11 +3,19 @@ agent/schemas.py this is the contract the web app is built against."""
 
 from datetime import datetime
 from enum import StrEnum
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-from agent.schemas import Decision, GapReport, Proposal, Report, TargetJob
+from agent.schemas import (
+    CandidateProfile,
+    Decision,
+    GapReport,
+    LinkedInGuidance,
+    Proposal,
+    Report,
+    TargetJob,
+)
 
 
 class DocumentKind(StrEnum):
@@ -58,10 +66,40 @@ class MessageCreate(BaseModel):
     content: str = Field(min_length=1, max_length=8_000)
 
 
+class AskRequest(MessageCreate):
+    """A question or scoped draft request that never resumes the analysis graph."""
+
+    proposal_id: str = ""
+    draft_text: str = Field("", max_length=12_000)
+
+
+class DraftSuggestion(BaseModel):
+    """A checked suggestion to load into an existing proposal's local review draft."""
+
+    proposal_id: str
+    text: str
+    issues: list[str] = []
+    proposed_at_request: str
+    proposal: Proposal | None = None
+
+
+class AskResponse(BaseModel):
+    message: ChatMessage
+    suggestion: DraftSuggestion | None = None
+    revision: str = ""
+
+
+class ReanalyzeRequest(BaseModel):
+    target: TargetJob
+    confirmed: Literal[True]
+
+
 class ReviewSubmit(BaseModel):
     """A decision per proposal id; proposals left out count as rejected."""
 
     decisions: dict[str, Decision]
+    additions: list[Proposal] = Field(default_factory=list, max_length=50)
+    expected_revision: str = ""
 
 
 class SessionSnapshot(BaseModel):
@@ -71,6 +109,9 @@ class SessionSnapshot(BaseModel):
     status: SessionStatus
     created_at: datetime
     target: TargetJob
+    profile: CandidateProfile | None = None
+    revision: str = ""
+    linkedin_guidance: dict[str, LinkedInGuidance] = Field(default_factory=dict)
     has_linkedin: bool
     messages: list[ChatMessage]
     reports: dict[str, Report]

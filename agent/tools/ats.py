@@ -260,7 +260,9 @@ def format_issues(profile: CandidateProfile) -> list[str]:
         issues.append("Missing skills list.")
 
     for exp in profile.experience:
-        if not exp.start.strip() or not exp.end.strip():
+        if exp.kind in {"employment", "unclassified"} and (
+            not exp.start.strip() or not exp.end.strip()
+        ):
             issues.append(f"Role {exp.id} ({exp.title}) is missing start or end dates.")
         for bullet in exp.bullets:
             issues.extend(_check_bullet_issues(bullet.id, bullet.text))

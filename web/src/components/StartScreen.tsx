@@ -158,9 +158,9 @@ export function StartScreen({ onSessionCreated, onOpenDemoSession, onApiError }:
       <div className="start-intro">
         <h1 id="start-title">Tailor your resume with a team of agents you can watch.</h1>
         <p>
-          Give it your resume and the role. Researchers study the posting, the company and the
-          market in parallel, writers propose changes grounded in your own words, and a critic sends
-          back anything it can&apos;t verify. Nothing is exported until you decide on every change.
+          Give it your resume and the role. Researchers study the role, the company and the market
+          in parallel, writers propose changes grounded in your own words, and a critic sends back
+          anything it can&apos;t verify. Nothing is exported until you decide on every change.
         </p>
         <ol className="ensemble" aria-label="The team">
           {ENSEMBLE.map((part) => (
@@ -334,7 +334,12 @@ export function StartScreen({ onSessionCreated, onOpenDemoSession, onApiError }:
               Read {linkedinDoc.characters.toLocaleString()} characters of your LinkedIn profile
             </p>
           ) : null}
-          <p className="hint">LinkedIn is never scraped: export your profile or paste it.</p>
+          <p className="hint">
+            For a public profile, add your full LinkedIn URL under “Anything else” below. We
+            retrieve available content through Tavily. If it is unavailable, we can still prepare
+            suggestions from your resume. Upload an export or paste text for a profile-specific
+            audit.
+          </p>
         </fieldset>
 
         <fieldset className="form-part">
@@ -373,21 +378,25 @@ export function StartScreen({ onSessionCreated, onOpenDemoSession, onApiError }:
             value={jobUrl}
             onChange={(e) => setJobUrl(e.target.value)}
           />
-          <label htmlFor="target-jd-text">Posting text</label>
+          <label htmlFor="target-jd-text">Posting text, optional</label>
           <textarea
             id="target-jd-text"
             className="field"
             rows={6}
-            placeholder="Paste the posting if the link needs a sign-in. It makes the research much sharper."
+            placeholder="Paste one posting for sharper research, or leave it empty to aim at the role in general."
             value={jobText}
             onChange={(e) => setJobText(e.target.value)}
           />
+          <p className="hint">
+            A title alone works, like &ldquo;Data Scientist&rdquo;: the researchers work out what
+            similar roles ask for.
+          </p>
           <label htmlFor="target-notes">Anything else, optional</label>
           <input
             id="target-notes"
             className="field"
             type="text"
-            placeholder="e.g. level, region, what to emphasize"
+            placeholder="e.g. level, region, your public LinkedIn URL"
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
           />

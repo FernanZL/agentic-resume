@@ -2,10 +2,11 @@
 keys, so the graphs never read the environment and tests can give fakes."""
 
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from langchain_core.tools import BaseTool
 
+from agent.schemas import Source
 from agent.tools.fetch_url import FetchResult
 
 
@@ -14,3 +15,5 @@ class Toolbox:
     web_search: BaseTool  # name "web_search"
     fetch_url: BaseTool  # name "fetch_url"
     fetch: Callable[[str], Awaitable[FetchResult]]  # the posting, fetched in code
+    linkedin_search: BaseTool | None = None
+    guidance_cache: dict[str, tuple[float, str, list[Source]]] = field(default_factory=dict)

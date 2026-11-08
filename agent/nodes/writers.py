@@ -9,10 +9,11 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel, Field
 
 from agent.events import emit, step
+from agent.linkedin_guidance import copy_issues
 from agent.llm import Models, structured
 from agent.prompts import prompt
-from agent.render import original_of
-from agent.schemas import Document, Proposal, ProposalStatus
+from agent.render import apply_decisions, original_of, profile_markdown
+from agent.schemas import Action, Decision, Document, Proposal, ProposalStatus
 from agent.state import AnalysisState
 from agent.tools import ats
 from agent.tools.fetch_url import untrusted
@@ -25,6 +26,7 @@ class Draft(BaseModel):
     proposed: str
     rationale: str = Field(description="Why, in one or two sentences, tied to the target role")
     keywords: list[str] = Field([], description="The role's keywords this text now covers")
+    evidence_refs: list[str] = Field(default_factory=list)
 
 
 class Drafts(BaseModel):
@@ -55,12 +57,14 @@ def _context(document: Document, state: AnalysisState) -> str:
         "target": state["target"].model_dump(),
         "gap": gap.model_dump() if gap else None,
         "research": reports,
+        "keyword_evidence": state.get("keyword_evidence") or {},
     }
     return json.dumps(context, ensure_ascii=False)
 
 
 def _documents(document: Document, state: AnalysisState) -> str:
     profile = untrusted(state["profile"].model_dump_json(), "resume (structured)")
+    profile += "\n\n" + untrusted(state["documents"]["resume"], "supplied resume")
     linkedin = state.get("linkedin")
     if document is Document.LINKEDIN and linkedin:
         return profile + "\n\n" + untrusted(linkedin.model_dump_json(), "linkedin (structured)")
@@ -100,6 +104,16 @@ def to_proposals(
         if original is None or draft.proposed.strip() == (original or "").strip():
             continue
         pid = proposal_id(document, target)
+        valid_refs = {r.id for r in state["profile"].experience}
+        valid_refs |= {b.id for r in state["profile"].experience for b in r.bullets}
+        refs = [ref for ref in draft.evidence_refs if ref in valid_refs]
+        if target.startswith("exp"):
+            refs = list(dict.fromkeys([*refs, target.split(".")[0]]))
+        issues = (
+            copy_issues(target, draft.proposed, state["profile"])
+            if document is Document.LINKEDIN
+            else []
+        )
         proposals[pid] = Proposal(
             id=pid,
             document=document,
@@ -107,9 +121,11 @@ def to_proposals(
             original=original,
             proposed=draft.proposed.strip(),
             rationale=draft.rationale,
-            keywords=draft.keywords,
+            keywords=ats.keyword_coverage(draft.proposed, draft.keywords).matched,
             placeholders=ats.placeholders_in(draft.proposed),
-            status=ProposalStatus.OK,
+            status=ProposalStatus.FLAGGED if issues else ProposalStatus.OK,
+            issues=issues,
+            evidence_refs=refs,
         )
     return proposals
 
@@ -131,7 +147,21 @@ def make_writer(document: Document, models: Models):
 
     @step(node)
     async def write(state: AnalysisState) -> dict:
-        drafts: Drafts = await structured(model, Drafts).ainvoke(_request(document, state))
+        messages = _request(document, state)
+        drafts: Drafts = await structured(model, Drafts).ainvoke(messages)
+        if document is Document.RESUME and not feedback_for(document, state):
+            missing = uncovered_supported_keywords(drafts.proposals, state)
+            if missing:
+                messages.append(
+                    HumanMessage(
+                        "The proposed resume still omits these evidence-backed keywords: "
+                        + json.dumps(missing)
+                        + ". Include them naturally using only the supplied evidence. "
+                        "Return the complete set of proposals. Current drafts:\n"
+                        + drafts.model_dump_json()
+                    )
+                )
+                drafts = await structured(model, Drafts).ainvoke(messages)
         updates: dict[str, Proposal | None] = dict(to_proposals(document, drafts.proposals, state))
         if flagged := feedback_for(document, state):  # a rewrite answers only the flagged ones
             updates = {pid: p for pid, p in updates.items() if pid in flagged}
@@ -146,3 +176,17 @@ def make_writer(document: Document, models: Models):
         return {"proposals": updates}
 
     return write
+
+
+def uncovered_supported_keywords(drafts: list[Draft], state: AnalysisState) -> list[str]:
+    """Measure supported missing keywords against actual proposed text, not metadata."""
+    proposals = to_proposals(Document.RESUME, drafts, state)
+    final = apply_decisions(
+        state["profile"],
+        None,
+        proposals,
+        {pid: Decision(action=Action.ACCEPT) for pid in proposals},
+    )
+    return ats.keyword_coverage(
+        profile_markdown(final.resume), list(state.get("keyword_evidence") or {})
+    ).missing

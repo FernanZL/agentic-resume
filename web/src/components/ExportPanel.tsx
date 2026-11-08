@@ -10,18 +10,19 @@ import {
   type ExportJson,
   type SessionSnapshot,
   downloadExport,
-  formatProfileAsMarkdown,
   getExportHtmlUrl,
   getExportJson,
+  getLinkedInCopyIssues,
+  getLinkedInGuidance,
+  roleSections,
 } from "../api";
+import { targetName } from "../score";
 import { IconAlert, IconCheck, IconCopy, IconDownload, IconPrint } from "./Icons";
 
 export interface ExportPanelProps {
   snapshot: SessionSnapshot;
   onApiError: (err: unknown) => void;
 }
-
-const LINKEDIN_NAMES: Record<string, string> = { headline: "Headline", about: "About" };
 
 export function ExportPanel({ snapshot, onApiError }: ExportPanelProps) {
   const [downloading, setDownloading] = useState<"docx" | "md" | null>(null);
@@ -94,6 +95,27 @@ export function ExportPanel({ snapshot, onApiError }: ExportPanelProps) {
     }
   };
 
+  const handleCopyMarkdown = async () => {
+    if (!isReviewed) return;
+    try {
+      const blob = await downloadExport(snapshot.session_id, "md");
+      const text =
+        typeof blob.text === "function"
+          ? await blob.text()
+          : await new Promise<string>((resolve, reject) => {
+              const reader = new FileReader();
+              reader.onload = () => resolve(String(reader.result ?? ""));
+              reader.onerror = () => reject(reader.error);
+              reader.readAsText(blob);
+            });
+      await navigator.clipboard.writeText(text);
+      setCopiedId("full-md");
+      setTimeout(() => setCopiedId(null), 2000);
+    } catch (err) {
+      onApiError(err);
+    }
+  };
+
   const handleOpenPrintHtml = () => {
     if (!isReviewed) return;
     window.open(getExportHtmlUrl(snapshot.session_id), "_blank", "noopener,noreferrer");
@@ -101,9 +123,6 @@ export function ExportPanel({ snapshot, onApiError }: ExportPanelProps) {
 
   const linkedinEntries = exportData ? Object.entries(exportData.linkedin) : [];
   const resumeProfile = exportData?.resume ?? null;
-  const markdownPreview = resumeProfile
-    ? formatProfileAsMarkdown(resumeProfile, snapshot.target.title)
-    : "";
 
   return (
     <section className="export" aria-labelledby="export-title">
@@ -163,10 +182,19 @@ export function ExportPanel({ snapshot, onApiError }: ExportPanelProps) {
             {linkedinEntries.map(([target, finalCopy]) => {
               const copyKey = `linkedin:${target}`;
               const isCopied = copiedId === copyKey;
+              const serverGuidance = exportData?.linkedin_guidance?.[target];
+              const guidance = getLinkedInGuidance(target, resumeProfile, serverGuidance);
+              const copyIssues = getLinkedInCopyIssues(target, finalCopy, resumeProfile, guidance);
+              const isProjectSection = guidance.section.startsWith("Projects");
+              const fieldLabel =
+                isProjectSection && guidance.field === "Description"
+                  ? "Projects description"
+                  : guidance.field;
+
               return (
                 <li key={copyKey} className="linkedin-item">
                   <div className="linkedin-item-head">
-                    <strong>{LINKEDIN_NAMES[target] ?? `Experience (${target})`}</strong>
+                    <strong>{targetName(target, resumeProfile)}</strong>
                     <button
                       type="button"
                       className="btn btn-small"
@@ -180,6 +208,28 @@ export function ExportPanel({ snapshot, onApiError }: ExportPanelProps) {
                       {isCopied ? "Copied" : "Copy"}
                     </button>
                   </div>
+                  <div className="linkedin-meta">
+                    <span>
+                      <strong>Where to paste:</strong> {guidance.section} · {fieldLabel}
+                    </span>
+                    <span className="linkedin-count">
+                      {finalCopy.length}
+                      {guidance.character_limit !== null
+                        ? ` / ${guidance.character_limit} chars`
+                        : " chars"}
+                    </span>
+                    {guidance.character_limit !== null && !guidance.verified ? (
+                      <span className="linkedin-advisory">Advisory limit (unverified)</span>
+                    ) : null}
+                  </div>
+                  <p className="linkedin-instructions">{guidance.instructions}</p>
+                  {copyIssues.length ? (
+                    <ul className="issues" aria-label={`Copy issues for ${target}`}>
+                      {copyIssues.map((issue, i) => (
+                        <li key={i}>{issue}</li>
+                      ))}
+                    </ul>
+                  ) : null}
                   <p className="linkedin-text">{finalCopy}</p>
                 </li>
               );
@@ -195,7 +245,7 @@ export function ExportPanel({ snapshot, onApiError }: ExportPanelProps) {
             <button
               type="button"
               className="btn btn-small"
-              onClick={() => void handleCopy("full-md", markdownPreview)}
+              onClick={() => void handleCopyMarkdown()}
             >
               {copiedId === "full-md" ? (
                 <IconCheck width={14} height={14} aria-hidden="true" />
@@ -211,36 +261,43 @@ export function ExportPanel({ snapshot, onApiError }: ExportPanelProps) {
               {resumeProfile.headline ? (
                 <p className="sheet-headline">{resumeProfile.headline}</p>
               ) : null}
-              <p className="sheet-contact">{resumeProfile.contact.join(" · ")}</p>
+              {resumeProfile.contact.length ? (
+                <p className="sheet-contact">{resumeProfile.contact.join(" · ")}</p>
+              ) : null}
             </header>
             {resumeProfile.summary ? (
               <section>
                 <h2>Summary</h2>
-                <p>{resumeProfile.summary}</p>
+                <p className="sheet-summary">{resumeProfile.summary}</p>
               </section>
             ) : null}
-            <section>
-              <h2>Experience</h2>
-              {resumeProfile.experience.map((exp) => (
-                <div key={exp.id} className="sheet-role">
-                  <h3>
-                    {exp.title} — {[exp.organization, exp.location].filter(Boolean).join(", ")}
-                  </h3>
-                  <p className="sheet-dates">{[exp.start, exp.end].filter(Boolean).join(" – ")}</p>
-                  <ul>
-                    {exp.bullets.map((b) => (
-                      <li key={b.id}>{b.text}</li>
-                    ))}
-                  </ul>
-                </div>
-              ))}
-            </section>
+            {roleSections(resumeProfile).map(([heading, roles], sectionIdx) => (
+              <section key={`${heading}-${sectionIdx}`}>
+                <h2>{heading}</h2>
+                {roles.map((exp) => {
+                  const whereParts = [exp.organization, exp.location].filter(Boolean).join(", ");
+                  const dates = [exp.start, exp.end].filter(Boolean).join(" – ");
+                  return (
+                    <div key={exp.id} className="sheet-role">
+                      <h3>{whereParts ? `${exp.title} — ${whereParts}` : exp.title}</h3>
+                      {dates ? <p className="sheet-dates">{dates}</p> : null}
+                      <ul>
+                        {exp.bullets.map((b) => (
+                          <li key={b.id}>{b.text}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  );
+                })}
+              </section>
+            ))}
             {resumeProfile.education.length ? (
               <section>
                 <h2>Education</h2>
                 {resumeProfile.education.map((edu, idx) => (
                   <p key={idx}>
-                    <strong>{edu.degree}</strong>, {edu.institution}
+                    <strong>{edu.degree}</strong>
+                    {edu.institution ? `, ${edu.institution}` : ""}
                     {edu.year ? ` (${edu.year})` : ""}
                     {edu.details ? ` — ${edu.details}` : ""}
                   </p>
@@ -251,6 +308,32 @@ export function ExportPanel({ snapshot, onApiError }: ExportPanelProps) {
               <section>
                 <h2>Skills</h2>
                 <p>{resumeProfile.skills.join(", ")}</p>
+              </section>
+            ) : null}
+            {resumeProfile.certifications && resumeProfile.certifications.length ? (
+              <section>
+                <h2>Certifications</h2>
+                <ul>
+                  {resumeProfile.certifications.map((cert, idx) => (
+                    <li key={idx}>{cert}</li>
+                  ))}
+                </ul>
+              </section>
+            ) : null}
+            {resumeProfile.languages && resumeProfile.languages.length ? (
+              <section>
+                <h2>Languages</h2>
+                <p>{resumeProfile.languages.join(", ")}</p>
+              </section>
+            ) : null}
+            {resumeProfile.other && resumeProfile.other.length ? (
+              <section>
+                <h2>Other</h2>
+                <ul>
+                  {resumeProfile.other.map((item, idx) => (
+                    <li key={idx}>{item}</li>
+                  ))}
+                </ul>
               </section>
             ) : null}
           </article>

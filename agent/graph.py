@@ -42,6 +42,16 @@ def after_tools(state: SessionState) -> str:
     return "analysis" if state.get("route") == "analyze" else "concierge"
 
 
+def after_start(state: SessionState) -> str:
+    """Route an explicitly confirmed rerun directly, without model-selected target changes."""
+    return "confirmed_analysis" if state.get("route") == "analyze_confirmed" else "concierge"
+
+
+def consume_confirmation(state: SessionState) -> dict:
+    """Consume a rerun authorization before any fallible analysis or model call."""
+    return {"route": None, "analysis_started": True}
+
+
 def build_graph(
     models: Models, toolbox: Toolbox, checkpointer: BaseCheckpointSaver | None
 ) -> CompiledStateGraph:
@@ -51,7 +61,9 @@ def build_graph(
     builder.add_node("concierge", make_concierge(models, tools))
     builder.add_node("tools", ToolNode(tools, handle_tool_errors=tool_error))
     builder.add_node("analysis", build_analysis(models, toolbox))
-    builder.add_edge(START, "concierge")
+    builder.add_node("confirmed_analysis", consume_confirmation)
+    builder.add_conditional_edges(START, after_start, ["concierge", "confirmed_analysis"])
+    builder.add_edge("confirmed_analysis", "analysis")
     builder.add_conditional_edges("concierge", after_concierge, ["tools", END])
     builder.add_conditional_edges("tools", after_tools, ["analysis", "concierge"])
     builder.add_edge("analysis", "concierge")

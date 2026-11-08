@@ -24,7 +24,11 @@ function reportCount(report: Report | undefined): string {
   if (report.market) return `${report.market.in_demand_skills.length} skills in demand`;
   if (report.linkedin) {
     const li = report.linkedin;
-    return `${li.headline_issues.length + li.about_issues.length + li.experience_gaps.length} gaps`;
+    const total = li.headline_issues.length + li.about_issues.length + li.experience_gaps.length;
+    if (li.basis === "resume_only") {
+      return `${total} from resume`;
+    }
+    return `${total} gaps`;
   }
   return "";
 }
@@ -36,6 +40,7 @@ export interface ProgramNoteProps {
   onOpenReview: () => void;
   onOpenExport: () => void;
   onResume: () => void;
+  onOpenReanalyze?: () => void;
   resuming: boolean;
   exportOpen: boolean;
 }
@@ -47,6 +52,7 @@ export function ProgramNote({
   onOpenReview,
   onOpenExport,
   onResume,
+  onOpenReanalyze,
   resuming,
   exportOpen,
 }: ProgramNoteProps) {
@@ -73,7 +79,7 @@ export function ProgramNote({
             {gap.score}
             <small>/100</small>
           </span>
-          <span className="match-caption">match for this role</span>
+          <span className="match-caption">original resume match for this role</span>
         </button>
       ) : (
         <p className="note-pending">The match score appears after the gap analysis.</p>
@@ -82,8 +88,8 @@ export function ProgramNote({
       {gap ? (
         <div className="note-block">
           <button type="button" className="note-link" onClick={() => onSelect("gap_analysis")}>
-            Keywords {Math.round(gap.keyword_coverage * 100)}% · {gap.matched_keywords.length} of{" "}
-            {total}
+            Original keywords {Math.round(gap.keyword_coverage * 100)}% ·{" "}
+            {gap.matched_keywords.length} of {total}
           </button>
           <div className="chips">
             {gap.matched_keywords.map((kw) => (
@@ -119,6 +125,26 @@ export function ProgramNote({
       </ul>
 
       <p className="note-cost">${snapshot.cost_usd.toFixed(4)} spent on models in this session</p>
+
+      {onOpenReanalyze ? (
+        <div className="note-block">
+          <button
+            type="button"
+            className="btn btn-sm"
+            disabled={snapshot.status === "running" || snapshot.status === "review"}
+            title={
+              snapshot.status === "review"
+                ? "Finish or submit your review before starting a fresh analysis."
+                : snapshot.status === "running"
+                  ? "Wait for the current run to finish."
+                  : "Change the target role or run a fresh analysis from scratch."
+            }
+            onClick={onOpenReanalyze}
+          >
+            Change target / Run fresh analysis
+          </button>
+        </div>
+      ) : null}
     </aside>
   );
 }

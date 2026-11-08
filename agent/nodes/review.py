@@ -5,7 +5,7 @@ the proposals and decisions on demand, so later revisions always show."""
 from langgraph.types import interrupt
 
 from agent.events import LABELS, emit, step
-from agent.schemas import Decision
+from agent.schemas import Decision, Proposal
 from agent.state import AnalysisState
 
 
@@ -34,7 +34,18 @@ async def review(state: AnalysisState) -> dict:
         return {}
     answer = interrupt({"proposal_ids": ids})
     emit("node_finished", "review", label=LABELS["review"], seconds=0)
-    return {"decisions": parse_decisions(answer, set(ids))}
+    additions = (
+        {
+            pid: Proposal.model_validate(p)
+            for pid, p in (answer.get("additional_proposals") or {}).items()
+        }
+        if isinstance(answer, dict)
+        else {}
+    )
+    return {
+        "proposals": additions,
+        "decisions": parse_decisions(answer, set(ids) | additions.keys()),
+    }
 
 
 @step("finalize")

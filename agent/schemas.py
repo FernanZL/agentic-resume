@@ -19,11 +19,13 @@ class Bullet(BaseModel):
 
 
 class Experience(BaseModel):
-    """A role (or project) on the resume."""
+    """A source entry, preserving its kind and original resume section."""
 
     id: str = Field(description="Stable id, e.g. 'exp0' (set in code)")
     title: str
-    organization: str
+    organization: str = ""
+    kind: Literal["employment", "project", "volunteer", "other", "unclassified"] = "unclassified"
+    source_section: str = Field("", description="Original section heading, copied verbatim")
     location: str = ""
     start: str = Field("", description="As written on the resume, e.g. 'Mar 2021'")
     end: str = Field("", description="As written, e.g. 'Present'")
@@ -126,10 +128,29 @@ class LinkedInAudit(BaseModel):
     """Where the LinkedIn profile falls short of the resume and the target."""
 
     summary: str
+    basis: Literal["profile", "public", "resume_only"] = "profile"
+    retrieval_status: Literal[
+        "not_requested", "available", "unavailable", "not_configured", "failed"
+    ] = "not_requested"
+    sources: list[Source] = []
+    limitations: list[str] = []
     headline_issues: list[str] = []
     about_issues: list[str] = []
     experience_gaps: list[str] = Field([], description="On the resume but not on LinkedIn")
     inconsistencies: list[str] = Field([], description="Dates/titles that disagree")
+
+
+class LinkedInGuidance(BaseModel):
+    """Placement metadata for reviewed copy, with explicit verification status."""
+
+    section: str
+    field: str
+    instructions: str
+    character_limit: int | None = None
+    verified: bool = False
+    source_url: str
+    version: str
+    status: str = "advisory_unverified"
 
 
 class Report(BaseModel):
@@ -189,6 +210,7 @@ class Proposal(BaseModel):
     placeholders: list[str] = Field([], description="e.g. '[X]%' the user must fill in")
     issues: list[str] = Field([], description="The critic's remaining concerns")
     status: ProposalStatus = ProposalStatus.OK
+    evidence_refs: list[str] = Field(default_factory=list, description="Source entry or bullet ids")
 
 
 class Action(StrEnum):

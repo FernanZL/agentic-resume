@@ -7,8 +7,17 @@ import re
 
 from agent.render import FinalDocuments, profile_markdown
 from agent.schemas import CandidateProfile
+from agent.sections import role_sections
 
-LINKEDIN_TITLES = {"headline": "Headline", "about": "About"}
+LINKEDIN_TITLES = {"headline": "Headline", "about": "About", "skills": "Skills"}
+
+
+def linkedin_title(final: FinalDocuments, target: str) -> str:
+    """Label LinkedIn copy with a real section and named entry instead of internal ids."""
+    if target in LINKEDIN_TITLES:
+        return LINKEDIN_TITLES[target]
+    metadata = final.linkedin_guidance.get(target)
+    return metadata.section if metadata else "Experience description"
 
 
 def filename(profile: CandidateProfile, title: str, suffix: str) -> str:
@@ -22,7 +31,7 @@ def markdown(final: FinalDocuments) -> str:
     if final.linkedin:
         text += "\n---\n\n# LinkedIn\n"
         for target, copy in final.linkedin.items():
-            text += f"\n## {LINKEDIN_TITLES.get(target, f'Experience ({target})')}\n\n{copy}\n"
+            text += f"\n## {linkedin_title(final, target)}\n\n{copy}\n"
     return text
 
 
@@ -65,15 +74,17 @@ def docx_bytes(profile: CandidateProfile) -> bytes:
 def _experience(document, profile: CandidateProfile) -> None:
     if not profile.experience:
         return
-    document.add_heading("Experience", level=1)
-    for role in profile.experience:
-        where = ", ".join(part for part in (role.organization, role.location) if part)
-        document.add_heading(f"{role.title} — {where}", level=2)
-        dates = " – ".join(part for part in (role.start, role.end) if part)
-        if dates:
-            document.add_paragraph().add_run(dates).italic = True
-        for bullet in role.bullets:
-            document.add_paragraph(bullet.text, style="List Bullet")
+    for heading, roles in role_sections(profile):
+        document.add_heading(heading, level=1)
+        for role in roles:
+            where = ", ".join(part for part in (role.organization, role.location) if part)
+            title = f"{role.title} — {where}" if where else role.title
+            document.add_heading(title, level=2)
+            dates = " – ".join(part for part in (role.start, role.end) if part)
+            if dates:
+                document.add_paragraph().add_run(dates).italic = True
+            for bullet in role.bullets:
+                document.add_paragraph(bullet.text, style="List Bullet")
 
 
 def _education(document, profile: CandidateProfile) -> None:
@@ -95,6 +106,7 @@ h1 { font-size: 20pt; margin: 0; } h2 { font-size: 11pt; text-transform: upperca
      letter-spacing: .08em; border-bottom: 1px solid #999; margin: 18px 0 6px; }
 h3 { font-size: 10.5pt; margin: 10px 0 0; } .muted { color: #444; } ul { margin: 4px 0; }
 .linkedin { page-break-before: always; } pre { white-space: pre-wrap; font: inherit; }
+.resume-copy { white-space: pre-wrap; }
 @media print { body { margin: 0; padding: 0; } }
 """
 
@@ -109,21 +121,19 @@ def html_page(final: FinalDocuments) -> str:
     if r.contact:
         parts.append(f"<p class='muted'>{e(' · '.join(r.contact))}</p>")
     if r.summary:
-        parts.append(f"<h2>Summary</h2><p>{e(r.summary)}</p>")
-    if r.experience:
-        parts.append("<h2>Experience</h2>")
-    for role in r.experience:
-        where = ", ".join(x for x in (role.organization, role.location) if x)
-        dates = " – ".join(x for x in (role.start, role.end) if x)
-        bullets = "".join(f"<li>{e(b.text)}</li>" for b in role.bullets)
-        parts.append(
-            f"<h3>{e(role.title)} — {e(where)}</h3><p class='muted'>{e(dates)}</p>"
-            f"<ul>{bullets}</ul>"
-        )
+        parts.append(f"<h2>Summary</h2><p class='resume-copy'>{e(r.summary)}</p>")
+    for heading, roles in role_sections(r):
+        parts.append(f"<h2>{e(heading)}</h2>")
+        for role in roles:
+            where = ", ".join(x for x in (role.organization, role.location) if x)
+            title = f"{role.title} — {where}" if where else role.title
+            dates = " – ".join(x for x in (role.start, role.end) if x)
+            bullets = "".join(f"<li>{e(b.text)}</li>" for b in role.bullets)
+            parts.append(f"<h3>{e(title)}</h3><p class='muted'>{e(dates)}</p><ul>{bullets}</ul>")
     parts += _html_lists(r)
     if final.linkedin:
         blocks = "".join(
-            f"<h2>{e(LINKEDIN_TITLES.get(t, f'Experience ({t})'))}</h2><pre>{e(c)}</pre>"
+            f"<h2>{e(linkedin_title(final, t))}</h2><pre>{e(c)}</pre>"
             for t, c in final.linkedin.items()
         )
         parts.append(f"<section class='linkedin'><h1>LinkedIn</h1>{blocks}</section>")
@@ -141,7 +151,7 @@ def _html_lists(r: CandidateProfile) -> list[str]:
     if r.education:
         items = "".join(
             f"<li><strong>{e(s.degree)}</strong>, {e(s.institution)}"
-            f"{e(f' ({s.year})' if s.year else '')}</li>"
+            f"{e(f' ({s.year})' if s.year else '')}{e(f' — {s.details}' if s.details else '')}</li>"
             for s in r.education
         )
         parts.append(f"<h2>Education</h2><ul>{items}</ul>")

@@ -46,12 +46,20 @@ async def test_a_paused_session_survives_a_restart():
         await first.runner.start(session_id, "start", stubs.first_input())
         await first.runner.wait(session_id)
         assert (await first.db.get_session(session_id))["status"] == "review"
+        state = await first.runner.graph.aget_state({"configurable": {"thread_id": session_id}})
+        anchor = state.values["messages"][0].id
+        await first.db.add_advisory_turn(
+            session_id, anchor, "Why this proposal?", "It preserves the source facts."
+        )
 
     async with process() as second:
         config = {"configurable": {"thread_id": session_id}}
         state = await second.runner.graph.aget_state(config, subgraphs=True)
         assert state.next == ("analysis",)
         assert state.interrupts[0].value["proposal_ids"]
+        history = await second.db.advisory_history(session_id)
+        assert [m["role"] for m in history] == ["user", "assistant"]
+        assert history[0]["content"] == "Why this proposal?"
         await second.runner.start(session_id, "review", Command(resume=resume_with({})))
         await second.runner.wait(session_id)
         values = (await second.runner.graph.aget_state(config)).values

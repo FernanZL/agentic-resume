@@ -1,5 +1,5 @@
 # Local stack: Postgres, the API with hot reload, and the Vite dev server.
-# http://localhost:5173 (web) · http://localhost:8000/docs (API)
+# http://localhost:5173 (web) · http://localhost:8001/docs (API)
 services:
   db:
     image: postgres:16-alpine
@@ -23,7 +23,7 @@ services:
     environment:
       DATABASE_URL: postgresql://agentic:agentic@db:5432/agentic
       LANGFUSE_TRACING_ENVIRONMENT: development
-    ports: ["8000:8000"]
+    ports: ["8001:8000"]
     volumes:
       - ./agent:/app/agent
       - ./backend:/app/backend

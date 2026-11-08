@@ -6,19 +6,29 @@ from typing import Annotated, Literal
 from fastapi import APIRouter, Header, HTTPException, Query, Request, Response
 from fastapi.responses import JSONResponse, StreamingResponse
 from langchain_core.messages import AIMessage, HumanMessage
-from langgraph.types import Command
+from langgraph.types import Command, Overwrite
 
+from agent.linkedin_guidance import guidance_for
+from agent.nodes.critic import deterministic_issues
 from agent.nodes.review import resume_with
+from agent.nodes.writers import Draft, to_proposals
 from agent.render import apply_decisions
+from agent.revisions import review_revision
+from agent.schemas import Decision, ProposalStatus
 from backend import export
+from backend.advisory import answer_question, current_history, session_claim
 from backend.budget import BudgetExceeded
 from backend.database import DocumentUnavailable, new_id
+from backend.errors import error_code
 from backend.events import event_stream
 from backend.runner import RunActive
 from backend.schemas import (
+    AskRequest,
+    AskResponse,
     ChatMessage,
     DocumentKind,
     MessageCreate,
+    ReanalyzeRequest,
     ReviewSubmit,
     RunAccepted,
     SessionCreate,
@@ -117,7 +127,14 @@ async def get_session(svc: Svc, session_id: str) -> SessionSnapshot:
         created_at=row["created_at"],
         target=values.get("target") or row["target"],
         has_linkedin=row["has_linkedin"],
-        messages=chat_messages(values),
+        messages=merge_advisory(chat_messages(values), await svc.db.advisory_history(session_id)),
+        profile=values.get("profile"),
+        revision=review_revision(values),
+        linkedin_guidance={
+            p.target: guidance_for(p.target, values["profile"], values.get("linkedin"))
+            for p in proposals
+            if p.document.value == "linkedin"
+        },
         reports={kind: report for kind, report in (values.get("reports") or {}).items()},
         gap=values.get("gap"),
         proposals=sorted(proposals, key=lambda p: p.id),
@@ -125,6 +142,146 @@ async def get_session(svc: Svc, session_id: str) -> SessionSnapshot:
         reviewed=bool(values.get("analyzed")),
         cost_usd=round(await svc.db.session_cost(session_id), 4),
         last_event_id=cursor,
+    )
+
+
+def merge_advisory(messages: list[ChatMessage], history: list[dict]) -> list[ChatMessage]:
+    """Place saved advisory turns after their original conversation anchor."""
+    advisory_ids = {m["id"] for m in history}
+    messages = [m for m in messages if m.id not in advisory_ids]
+    grouped: dict[str, list[ChatMessage]] = {}
+    for item in history:
+        grouped.setdefault(item["anchor_id"], []).append(
+            ChatMessage(
+                id=item["id"],
+                role=item["role"],
+                content=item["content"],
+            )
+        )
+    result = []
+    for message in messages:
+        result.append(message)
+        result.extend(grouped.pop(message.id, []))
+    for remaining in grouped.values():
+        result.extend(remaining)
+    return result
+
+
+@router.post("/{session_id}/ask", dependencies=[Passcode], operation_id="ask_about_session")
+async def ask_about_session(svc: Svc, session_id: str, body: AskRequest) -> AskResponse:
+    """Discuss saved results or draft one change without resuming a pending review."""
+    row = await session_row(svc, session_id)
+    async with session_claim(svc, session_id):
+        if row["status"] not in {SessionStatus.REVIEW, SessionStatus.IDLE}:
+            raise HTTPException(409, "session_not_ready")
+        try:
+            await svc.budget.check()
+            return await answer_question(svc, session_id, body, await graph_values(svc, session_id))
+        except BudgetExceeded:
+            raise HTTPException(429, "budget_exceeded") from None
+        except HTTPException:
+            raise
+        except Exception as error:  # noqa: BLE001  never expose document text in model errors
+            raise HTTPException(502, error_code(error)) from None
+
+
+def added_proposals(body: ReviewSubmit, values: dict) -> dict:
+    """Rebuild explicitly submitted additions from real source targets and stable code ids."""
+    additions = {}
+    existing = values.get("proposals") or {}
+    for item in body.additions:
+        candidates = to_proposals(
+            item.document,
+            [
+                Draft(
+                    target=item.target,
+                    proposed=item.proposed,
+                    rationale="Explicitly reviewed draft.",
+                    evidence_refs=item.evidence_refs,
+                )
+            ],
+            values,
+        )
+        for pid, proposal in candidates.items():
+            if pid in existing or pid in additions:
+                raise HTTPException(409, "proposal_already_exists")
+            issues = deterministic_issues(proposal, values)
+            additions[pid] = proposal.model_copy(
+                update={
+                    "issues": issues,
+                    "status": ProposalStatus.FLAGGED if issues else ProposalStatus.OK,
+                }
+            )
+        if not candidates:
+            raise HTTPException(422, "invalid_addition")
+    return additions
+
+
+def validated_decisions(body: ReviewSubmit, values: dict, additions: dict | None = None) -> dict:
+    """Validate explicit user edits; generated suggestions are checked before being offered."""
+    if body.expected_revision and body.expected_revision != review_revision(values):
+        raise HTTPException(409, "stale_review")
+    proposals = {**(values.get("proposals") or {}), **(additions or {})}
+    for pid, decision in body.decisions.items():
+        if pid not in proposals:
+            raise HTTPException(422, "unknown_proposal")
+        if decision.action.value == "edit" and not decision.text.strip():
+            raise HTTPException(422, "empty_edit")
+    return {pid: decision.model_dump(mode="json") for pid, decision in body.decisions.items()}
+
+
+@router.post("/{session_id}/amend", dependencies=[Passcode], operation_id="amend_reviewed_session")
+async def amend_reviewed_session(svc: Svc, session_id: str, body: ReviewSubmit) -> SessionSnapshot:
+    """Apply explicitly reviewed edits to a completed session, without another analysis."""
+    row = await session_row(svc, session_id)
+    async with session_claim(svc, session_id):
+        values = await graph_values(svc, session_id)
+        if row["status"] != SessionStatus.IDLE or not values.get("analyzed"):
+            raise HTTPException(409, "not_reviewed")
+        if not body.expected_revision:
+            raise HTTPException(422, "expected_revision_required")
+        if body.expected_revision != review_revision(values):
+            raise HTTPException(409, "stale_review")
+        additions = added_proposals(body, values)
+        decisions = validated_decisions(body, values, additions)
+        await svc.runner.graph.aupdate_state(
+            config(session_id),
+            {
+                "proposals": additions,
+                "decisions": {pid: Decision.model_validate(d) for pid, d in decisions.items()},
+            },
+        )
+        return await get_session(svc, session_id)
+
+
+@router.post(
+    "/{session_id}/reanalyze",
+    status_code=202,
+    dependencies=[Passcode],
+    operation_id="reanalyze_session",
+)
+async def reanalyze_session(svc: Svc, session_id: str, body: ReanalyzeRequest) -> RunAccepted:
+    """Replace saved results only after the user explicitly confirms a fresh analysis."""
+    row = await session_row(svc, session_id)
+    if row["status"] == SessionStatus.REVIEW:
+        raise HTTPException(409, "review_pending")
+    return await start(
+        svc,
+        session_id,
+        "reanalyze",
+        {
+            "target": body.target,
+            "route": "analyze_confirmed",
+            "analyzed": False,
+            "reports": Overwrite({}),
+            "proposals": Overwrite({}),
+            "decisions": Overwrite({}),
+            "gap": None,
+            "critique": {},
+            "critique_rounds": 0,
+            "keyword_evidence": {},
+            "messages": [HumanMessage(f"Confirmed a fresh analysis for {body.target.title}.")],
+        },
     )
 
 
@@ -136,7 +293,15 @@ async def send_message(svc: Svc, session_id: str, body: MessageCreate) -> RunAcc
     row = await session_row(svc, session_id)
     if row["status"] == SessionStatus.REVIEW:
         raise HTTPException(409, "review_pending")
-    return await start(svc, session_id, "message", {"messages": [HumanMessage(body.content)]})
+    values = await graph_values(svc, session_id)
+    history = current_history(values, await svc.db.advisory_history(session_id))
+    replay = [
+        (HumanMessage if m["role"] == "user" else AIMessage)(content=m["content"], id=m["id"])
+        for m in history
+    ]
+    return await start(
+        svc, session_id, "message", {"messages": [*replay, HumanMessage(body.content)]}
+    )
 
 
 @router.post(
@@ -147,8 +312,14 @@ async def submit_review(svc: Svc, session_id: str, body: ReviewSubmit) -> RunAcc
     row = await session_row(svc, session_id)
     if row["status"] != SessionStatus.REVIEW:
         raise HTTPException(409, "no_review_pending")
-    decisions = {pid: d.model_dump(mode="json") for pid, d in body.decisions.items()}
-    return await start(svc, session_id, "review", Command(resume=resume_with(decisions)))
+    values = await graph_values(svc, session_id)
+    additions = added_proposals(body, values)
+    decisions = validated_decisions(body, values, additions)
+    payload = resume_with(decisions)
+    payload["additional_proposals"] = {
+        pid: p.model_dump(mode="json") for pid, p in additions.items()
+    }
+    return await start(svc, session_id, "review", Command(resume=payload))
 
 
 @router.post(

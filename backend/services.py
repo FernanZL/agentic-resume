@@ -14,6 +14,7 @@ from agent.graph import build_graph
 from agent.llm import Models, chat_model
 from agent.toolbox import Toolbox
 from agent.tools.fetch_url import fetch_text, make_fetch_tool
+from agent.tools.linkedin import make_linkedin_search
 from agent.tools.web_search import make_web_search
 from backend.budget import Budget
 from backend.database import Database
@@ -30,6 +31,7 @@ class Services:
     bus: EventBus
     runner: Runner
     budget: Budget
+    models: Models
 
 
 # What each role's model calls are named in traces: stable, verb-first.
@@ -63,6 +65,7 @@ def real_models(settings: Settings) -> Models:
 def real_toolbox(settings: Settings, client: httpx.AsyncClient) -> Toolbox:
     return Toolbox(
         web_search=make_web_search(settings.tavily_api_key),
+        linkedin_search=make_linkedin_search(settings.tavily_api_key),
         fetch_url=make_fetch_tool(client),
         fetch=partial(fetch_text, client=client),
     )
@@ -92,7 +95,7 @@ def build_services(
     budget = Budget(db, settings.max_daily_cost_usd, settings.call_reservation_usd)
     graph = build_graph(models, toolbox, saver)
     runner = Runner(db, bus, graph, budget, tracer, settings.log_error_details)
-    return Services(settings=settings, db=db, bus=bus, runner=runner, budget=budget)
+    return Services(settings=settings, db=db, bus=bus, runner=runner, budget=budget, models=models)
 
 
 def services(request: Request) -> Services:

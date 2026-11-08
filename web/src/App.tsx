@@ -4,19 +4,24 @@
  * passcode gate and the session states (review, interrupted, failed, budget, 404).
  */
 
-import { type FormEvent, useCallback, useEffect, useRef, useState } from "react";
+import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   type ChatMessage,
   type Decision,
+  type DraftSuggestion,
   type Event,
+  type Proposal,
   type ReviewDraftEntry,
   type SessionSnapshot,
   type SessionStatus,
   activateDemoSessionSnapshot,
+  amendSession,
+  askSession,
   formatRunFailedError,
   getSession,
   isMockMode,
   parseSessionIdFromPath,
+  reanalyzeSession,
   reconcileReviewDrafts,
   resumeSession,
   sendMessage,
@@ -26,7 +31,7 @@ import {
 } from "./api";
 import { ChatText } from "./components/ChatText";
 import { ExportPanel } from "./components/ExportPanel";
-import { IconKey, IconSend } from "./components/Icons";
+import { IconAlert, IconCheck, IconKey, IconSend } from "./components/Icons";
 import { ProgramNote } from "./components/ProgramNote";
 import { ReviewPanel } from "./components/ReviewPanel";
 import { ScorePanel } from "./components/ScorePanel";
@@ -42,6 +47,7 @@ import {
   emptyScore,
   nowPlaying,
   staffStatus,
+  targetName,
 } from "./score";
 
 type WorkspaceTab = "score" | "review" | "export";
@@ -72,12 +78,36 @@ export function App() {
   const [selectedStaff, setSelectedStaff] = useState<StaffNode | null>(null);
   const [streamingTokens, setStreamingTokens] = useState("");
   const [reviewDrafts, setReviewDrafts] = useState<Record<string, ReviewDraftEntry>>({});
+  const [stagedAdditions, setStagedAdditions] = useState<Proposal[]>([]);
+  const [suggestionsByMessageId, setSuggestionsByMessageId] = useState<
+    Record<string, DraftSuggestion & { revision?: string; draftAtRequest?: string }>
+  >({});
+  const [loadedSuggestionIds, setLoadedSuggestionIds] = useState<Record<string, boolean>>({});
+  const [staleSuggestionNotice, setStaleSuggestionNotice] = useState<Record<string, string>>({});
+  const [focusedProposalId, setFocusedProposalId] = useState<string | null>(null);
+  const [reviewConflict, setReviewConflict] = useState(false);
+  const [draftNotice, setDraftNotice] = useState("");
+  const draftBaseRevisionRef = useRef<string | null>(null);
+  const dirtyDraftIdsRef = useRef<Set<string>>(new Set());
+  const reviewDraftsRef = useRef(reviewDrafts);
+  reviewDraftsRef.current = reviewDrafts;
+  const stagedAdditionsRef = useRef(stagedAdditions);
+  stagedAdditionsRef.current = stagedAdditions;
 
   const [activeTab, setActiveTab] = useState<WorkspaceTab>("score");
   const [chatInput, setChatInput] = useState("");
   const [sendingMessage, setSendingMessage] = useState(false);
   const [submittingReview, setSubmittingReview] = useState(false);
+  const [amendingReview, setAmendingReview] = useState(false);
   const [resumingRun, setResumingRun] = useState(false);
+
+  const [showReanalyzeConfirm, setShowReanalyzeConfirm] = useState(false);
+  const [reanalyzeTitle, setReanalyzeTitle] = useState("");
+  const [reanalyzeCompany, setReanalyzeCompany] = useState("");
+  const [reanalyzeJobText, setReanalyzeJobText] = useState("");
+  const [reanalyzeJobUrl, setReanalyzeJobUrl] = useState("");
+  const [reanalyzeNotes, setReanalyzeNotes] = useState("");
+  const [reanalyzing, setReanalyzing] = useState(false);
 
   const [passcode, setPasscodeState] = useState<string>(() => getStoredPasscode());
   const [showPasscode, setShowPasscode] = useState(false);
@@ -94,6 +124,13 @@ export function App() {
   const replayUntilRef = useRef(0);
   const activeSessionIdRef = useRef<string | null>(sessionId);
   activeSessionIdRef.current = sessionId;
+
+  const allProposals = useMemo(() => {
+    const base = snapshot?.proposals ?? [];
+    if (stagedAdditions.length === 0) return base;
+    const baseIds = new Set(base.map((p) => p.id));
+    return [...base, ...stagedAdditions.filter((p) => !baseIds.has(p.id))];
+  }, [snapshot?.proposals, stagedAdditions]);
 
   const navigateToSession = useCallback((nextId: string | null, pushHistory = true) => {
     snapshotReqGenRef.current += 1;
@@ -114,6 +151,16 @@ export function App() {
     setErrorBanner(null);
     setStreamingTokens("");
     setReviewDrafts({});
+    draftBaseRevisionRef.current = null;
+    dirtyDraftIdsRef.current.clear();
+    setReviewConflict(false);
+    setDraftNotice("");
+    setStagedAdditions([]);
+    setSuggestionsByMessageId({});
+    setLoadedSuggestionIds({});
+    setStaleSuggestionNotice({});
+    setFocusedProposalId(null);
+    setShowReanalyzeConfirm(false);
     setScore(emptyScore());
     setSelectedStaff(null);
     setSnapshot(null);
@@ -157,6 +204,15 @@ export function App() {
           });
           return;
         }
+        if (err.detail === "stale_review") {
+          setActiveTab("review");
+          setErrorBanner({
+            code: "generic",
+            message:
+              "Saved decisions changed in another tab. Your draft text is preserved; compare it with the latest version before applying.",
+          });
+          return;
+        }
         setErrorBanner({
           code: "generic",
           message: `The server answered ${err.status}: ${err.detail}`,
@@ -186,7 +242,28 @@ export function App() {
         }
         setNotFoundSessionId(null);
         setSnapshot(snap);
-        setReviewDrafts((prev) => reconcileReviewDrafts(snap.proposals, snap.decisions, prev));
+        const dirty = dirtyDraftIdsRef.current.size > 0;
+        if (
+          dirty &&
+          draftBaseRevisionRef.current &&
+          snap.revision &&
+          draftBaseRevisionRef.current !== snap.revision
+        ) {
+          setReviewConflict(true);
+        }
+        const nextDrafts = reconcileReviewDrafts(
+          snap.proposals,
+          snap.decisions,
+          dirty ? reviewDraftsRef.current : {},
+          { preserveEditsOnConflict: true, additions: stagedAdditionsRef.current },
+        );
+        if (Object.values(nextDrafts).some((d) => d.stale)) {
+          setDraftNotice(
+            "A proposal changed. Your text is preserved; compare it with the latest saved version before applying it.",
+          );
+          setReviewConflict(true);
+        }
+        setReviewDrafts(nextDrafts);
         if (snap.status === "review") setActiveTab("review");
         return snap;
       } catch (err) {
@@ -305,17 +382,219 @@ export function App() {
     setErrorBanner(null);
   };
 
+  const handleReviewDraftsChange = (next: Record<string, ReviewDraftEntry>) => {
+    if (!snapshot) return;
+    for (const [id, draft] of Object.entries(next)) {
+      const previous = reviewDraftsRef.current[id];
+      if (!previous || previous.action !== draft.action || previous.text !== draft.text) {
+        dirtyDraftIdsRef.current.add(id);
+      }
+    }
+    if (dirtyDraftIdsRef.current.size && draftBaseRevisionRef.current === null) {
+      draftBaseRevisionRef.current = snapshot.revision ?? "";
+    }
+    reviewDraftsRef.current = next;
+    setReviewDrafts(next);
+  };
+
+  const reconcileConflict = (keepDrafts: boolean) => {
+    if (!snapshot) return;
+    const saved = reconcileReviewDrafts(allProposals, snapshot.decisions, {});
+    if (keepDrafts) {
+      for (const id of dirtyDraftIdsRef.current) {
+        const proposal = allProposals.find((p) => p.id === id);
+        const draft = reviewDraftsRef.current[id];
+        if (proposal && draft)
+          saved[id] = { ...draft, proposedAtDraft: proposal.proposed, stale: false };
+      }
+      draftBaseRevisionRef.current = snapshot.revision ?? "";
+    } else {
+      dirtyDraftIdsRef.current.clear();
+      draftBaseRevisionRef.current = null;
+      setStagedAdditions([]);
+    }
+    reviewDraftsRef.current = saved;
+    setReviewDrafts(saved);
+    setReviewConflict(false);
+    setDraftNotice("");
+  };
+
+  const openReanalyzeDialog = (prefillTitle?: string) => {
+    if (!snapshot) return;
+    if (snapshot.status === "review" || snapshot.status === "running") {
+      setErrorBanner({
+        code: "generic",
+        message:
+          snapshot.status === "review"
+            ? "Finish or submit your review before starting a fresh analysis."
+            : "Wait for the current run to finish before starting a fresh analysis.",
+      });
+      return;
+    }
+    setReanalyzeTitle(prefillTitle?.trim() || snapshot.target.title);
+    setReanalyzeCompany(snapshot.target.company);
+    setReanalyzeJobText(snapshot.target.job_text);
+    setReanalyzeJobUrl(snapshot.target.job_url);
+    setReanalyzeNotes(snapshot.target.notes ?? "");
+    setShowReanalyzeConfirm(true);
+  };
+
+  const handleConfirmReanalyze = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!snapshot || reanalyzing) return;
+    const title = reanalyzeTitle.trim();
+    if (!title) return;
+    setReanalyzing(true);
+    setErrorBanner(null);
+    try {
+      await reanalyzeSession(snapshot.session_id, {
+        target: {
+          title,
+          company: reanalyzeCompany.trim(),
+          job_url: reanalyzeJobUrl.trim(),
+          job_text: reanalyzeJobText.trim(),
+          notes: reanalyzeNotes.trim(),
+        },
+        confirmed: true,
+      });
+      setShowReanalyzeConfirm(false);
+      setStagedAdditions([]);
+      setReviewDrafts({});
+      draftBaseRevisionRef.current = null;
+      dirtyDraftIdsRef.current.clear();
+      setReviewConflict(false);
+      setDraftNotice("");
+      setSuggestionsByMessageId({});
+      setLoadedSuggestionIds({});
+      setStaleSuggestionNotice({});
+      setFocusedProposalId(null);
+      await refreshSnapshot(snapshot.session_id);
+    } catch (err) {
+      handleApiError(err, snapshot.session_id);
+    } finally {
+      setReanalyzing(false);
+    }
+  };
+
+  const handleLoadSuggestionIntoEdit = (
+    messageId: string,
+    suggestion: DraftSuggestion & { revision?: string; draftAtRequest?: string },
+  ) => {
+    const existing = allProposals.find((p) => p.id === suggestion.proposal_id);
+    const staged = Boolean(
+      suggestion.proposal && !snapshot?.proposals.some((p) => p.id === suggestion.proposal_id),
+    );
+    const editedSinceRequest =
+      suggestion.draftAtRequest !== undefined &&
+      reviewDraftsRef.current[suggestion.proposal_id]?.text !== suggestion.draftAtRequest;
+    if (
+      (existing && !staged && existing.proposed !== suggestion.proposed_at_request) ||
+      (suggestion.revision && snapshot?.revision && suggestion.revision !== snapshot.revision) ||
+      editedSinceRequest
+    ) {
+      setStaleSuggestionNotice((prev) => ({
+        ...prev,
+        [messageId]:
+          "This proposal changed since this suggestion was drafted. Ask for a fresh revision before loading.",
+      }));
+      return;
+    }
+    if (staged && suggestion.proposal) {
+      setStagedAdditions((prev) =>
+        prev.some((p) => p.id === suggestion.proposal!.id)
+          ? prev.map((p) => (p.id === suggestion.proposal!.id ? suggestion.proposal! : p))
+          : [...prev, suggestion.proposal!],
+      );
+    }
+    const baseProposed =
+      (staged ? suggestion.proposal?.proposed : existing?.proposed) ??
+      suggestion.proposed_at_request;
+    handleReviewDraftsChange({
+      ...reviewDraftsRef.current,
+      [suggestion.proposal_id]: {
+        action: "edit",
+        text: suggestion.text,
+        proposedAtDraft: baseProposed,
+        issues: suggestion.issues,
+      },
+    });
+    setLoadedSuggestionIds((prev) => ({ ...prev, [messageId]: true }));
+    setStaleSuggestionNotice((prev) => {
+      const next = { ...prev };
+      delete next[messageId];
+      return next;
+    });
+    openProposal(suggestion.proposal_id);
+  };
+
   const handleSendMessage = async (e: FormEvent) => {
     e.preventDefault();
-    if (!snapshot || !chatInput.trim() || snapshot.status === "review") return;
+    if (!snapshot || !chatInput.trim() || snapshot.status === "running") return;
     const text = chatInput.trim();
+
+    if (/^\/reanalyze\b/i.test(text)) {
+      const rest = text.replace(/^\/reanalyze\b/i, "").trim();
+      setChatInput("");
+      openReanalyzeDialog(rest || undefined);
+      return;
+    }
+
     const targetSessionId = snapshot.session_id;
     const previousStatus = snapshot.status;
     const optimisticId = `local-user-${Date.now()}`;
+    const scopedProposalId = focusedProposalId ?? undefined;
     setChatInput("");
     setSendingMessage(true);
     setErrorBanner(null);
     const optimistic: ChatMessage = { id: optimisticId, role: "user", content: text };
+
+    const useAskEndpoint =
+      snapshot.status === "review" ||
+      (snapshot.status === "idle" && snapshot.reviewed) ||
+      Boolean(scopedProposalId);
+
+    if (useAskEndpoint) {
+      setSnapshot((prev) => (prev ? { ...prev, messages: [...prev.messages, optimistic] } : prev));
+      try {
+        const draftAtRequest = scopedProposalId
+          ? reviewDraftsRef.current[scopedProposalId]?.text
+          : undefined;
+        const res = await askSession(targetSessionId, {
+          content: text,
+          proposal_id: scopedProposalId,
+          draft_text: draftAtRequest,
+        });
+        setFocusedProposalId(null);
+        setSnapshot((prev) => {
+          if (!prev) return prev;
+          const hasReply = prev.messages.some((m) => m.id === res.message.id);
+          return hasReply ? prev : { ...prev, messages: [...prev.messages, res.message] };
+        });
+        if (res.suggestion) {
+          setSuggestionsByMessageId((prev) => ({
+            ...prev,
+            [res.message.id]: { ...res.suggestion!, revision: res.revision, draftAtRequest },
+          }));
+        }
+      } catch (err) {
+        setSnapshot((prev) =>
+          prev
+            ? {
+                ...prev,
+                status: previousStatus,
+                messages: prev.messages.filter((m) => m.id !== optimisticId),
+              }
+            : prev,
+        );
+        setChatInput(text);
+        handleApiError(err, targetSessionId);
+        void refreshSnapshot(targetSessionId);
+      } finally {
+        setSendingMessage(false);
+      }
+      return;
+    }
+
     setSnapshot((prev) =>
       prev ? { ...prev, status: "running", messages: [...prev.messages, optimistic] } : prev,
     );
@@ -340,17 +619,55 @@ export function App() {
   };
 
   const handleSubmitReview = async (decisions: Record<string, Decision>) => {
-    if (!snapshot) return;
+    if (!snapshot || reviewConflict || sendingMessage) return;
     setSubmittingReview(true);
     setErrorBanner(null);
     try {
-      await submitReview(snapshot.session_id, { decisions });
+      await submitReview(snapshot.session_id, {
+        decisions,
+        additions: stagedAdditions.length > 0 ? stagedAdditions : undefined,
+        expected_revision: draftBaseRevisionRef.current ?? snapshot.revision,
+      });
+      dirtyDraftIdsRef.current.clear();
+      draftBaseRevisionRef.current = null;
+      setStagedAdditions([]);
       const updated = await refreshSnapshot(snapshot.session_id);
       if (updated) setActiveTab("export");
     } catch (err) {
       handleApiError(err, snapshot.session_id);
+      if (err instanceof HttpError && err.detail === "stale_review") {
+        setReviewConflict(true);
+        await refreshSnapshot(snapshot.session_id);
+      }
     } finally {
       setSubmittingReview(false);
+    }
+  };
+
+  const handleAmendReview = async (decisions: Record<string, Decision>) => {
+    if (!snapshot || reviewConflict || sendingMessage) return;
+    setAmendingReview(true);
+    setErrorBanner(null);
+    try {
+      const updated = await amendSession(snapshot.session_id, {
+        decisions,
+        additions: stagedAdditions.length > 0 ? stagedAdditions : undefined,
+        expected_revision: draftBaseRevisionRef.current ?? snapshot.revision,
+      });
+      dirtyDraftIdsRef.current.clear();
+      draftBaseRevisionRef.current = null;
+      setStagedAdditions([]);
+      setSnapshot(updated);
+      setReviewDrafts(reconcileReviewDrafts(updated.proposals, updated.decisions, {}));
+      setActiveTab("export");
+    } catch (err) {
+      handleApiError(err, snapshot.session_id);
+      if (err instanceof HttpError && err.detail === "stale_review") {
+        setReviewConflict(true);
+        await refreshSnapshot(snapshot.session_id);
+      }
+    } finally {
+      setAmendingReview(false);
     }
   };
 
@@ -393,12 +710,23 @@ export function App() {
     });
   };
 
+  const handleAskAboutProposal = (proposal: Proposal) => {
+    setFocusedProposalId(proposal.id);
+    requestAnimationFrame(() => {
+      const inputEl = document.getElementById("concierge-chat-input");
+      inputEl?.focus();
+    });
+  };
+
   // Follow whatever is playing until the user picks a staff themselves.
   const liveStaff = STAVES.find(
     (s) => s.node !== "concierge" && staffStatus(score, s.node) === "running",
   );
   const shownStaff: StaffNode = selectedStaff ?? liveStaff?.node ?? "job_analyst";
   const playing = nowPlaying(score);
+  const focusedProposal = focusedProposalId
+    ? allProposals.find((p) => p.id === focusedProposalId)
+    : undefined;
 
   return (
     <div className="app">
@@ -431,8 +759,8 @@ export function App() {
                 onClick={() => setActiveTab(t.id)}
               >
                 {t.label}
-                {t.id === "review" && snapshot.proposals.length ? (
-                  <span className="shell-tab-count">{snapshot.proposals.length}</span>
+                {t.id === "review" && allProposals.length ? (
+                  <span className="shell-tab-count">{allProposals.length}</span>
                 ) : null}
               </button>
             ))}
@@ -523,6 +851,82 @@ export function App() {
         </div>
       ) : null}
 
+      {showReanalyzeConfirm && snapshot ? (
+        <form
+          className="reanalyze-box no-print"
+          onSubmit={(e) => void handleConfirmReanalyze(e)}
+          aria-label="Confirm fresh analysis"
+        >
+          <div className="reanalyze-head">
+            <strong>Start a fresh analysis?</strong>
+            <p>
+              Running a fresh analysis replaces your current research reports, gap analysis, rewrite
+              proposals, and saved review decisions.
+            </p>
+          </div>
+          <div className="reanalyze-fields">
+            <label>
+              Target role title
+              <input
+                type="text"
+                className="field"
+                required
+                value={reanalyzeTitle}
+                onChange={(e) => setReanalyzeTitle(e.target.value)}
+              />
+            </label>
+            <label>
+              Company (optional)
+              <input
+                type="text"
+                className="field"
+                value={reanalyzeCompany}
+                onChange={(e) => setReanalyzeCompany(e.target.value)}
+              />
+            </label>
+            <label className="reanalyze-full">
+              Posting URL (optional)
+              <input
+                type="url"
+                className="field"
+                value={reanalyzeJobUrl}
+                onChange={(e) => setReanalyzeJobUrl(e.target.value)}
+              />
+            </label>
+            <label className="reanalyze-full">
+              Job description (optional)
+              <textarea
+                className="field"
+                rows={2}
+                value={reanalyzeJobText}
+                onChange={(e) => setReanalyzeJobText(e.target.value)}
+              />
+            </label>
+            <label className="reanalyze-full">
+              Level, region or other notes (optional)
+              <input
+                type="text"
+                className="field"
+                value={reanalyzeNotes}
+                onChange={(e) => setReanalyzeNotes(e.target.value)}
+              />
+            </label>
+          </div>
+          <div className="row">
+            <button
+              type="submit"
+              className="btn btn-primary"
+              disabled={reanalyzing || !reanalyzeTitle.trim()}
+            >
+              {reanalyzing ? "Starting fresh analysis…" : "Confirm & Start Fresh Analysis"}
+            </button>
+            <button type="button" className="btn" onClick={() => setShowReanalyzeConfirm(false)}>
+              Cancel
+            </button>
+          </div>
+        </form>
+      ) : null}
+
       <main className="stage">
         {!sessionId ? (
           <StartScreen
@@ -559,12 +963,90 @@ export function App() {
             <aside className="chat no-print" aria-label="Chat with the assistant">
               <h2 className="col-title">Assistant</h2>
               <div className="chat-log" role="log" aria-live="polite">
-                {snapshot.messages.map((m) => (
-                  <div key={m.id} className={`msg msg-${m.role}`}>
-                    <span className="msg-who">{m.role === "assistant" ? "Assistant" : "You"}</span>
-                    <ChatText text={m.content} />
-                  </div>
-                ))}
+                {snapshot.messages.map((m) => {
+                  const suggestion = suggestionsByMessageId[m.id];
+                  const isLoaded = Boolean(loadedSuggestionIds[m.id]);
+                  const staleNotice = staleSuggestionNotice[m.id];
+                  const targetProposal = suggestion
+                    ? (allProposals.find((p) => p.id === suggestion.proposal_id) ??
+                      suggestion.proposal ??
+                      undefined)
+                    : undefined;
+                  const isStale =
+                    suggestion &&
+                    ((suggestion.revision &&
+                      snapshot.revision &&
+                      suggestion.revision !== snapshot.revision) ||
+                      (targetProposal &&
+                        !suggestion.proposal &&
+                        targetProposal.proposed !== suggestion.proposed_at_request));
+
+                  return (
+                    <div key={m.id} className={`msg msg-${m.role}`}>
+                      <span className="msg-who">
+                        {m.role === "assistant" ? "Assistant" : "You"}
+                      </span>
+                      <ChatText text={m.content} />
+                      {suggestion ? (
+                        <div
+                          className="suggestion-card"
+                          aria-label={`Draft suggestion for ${suggestion.proposal_id}`}
+                        >
+                          <div className="suggestion-head">
+                            <strong>
+                              Draft suggestion ·{" "}
+                              {targetProposal
+                                ? targetName(targetProposal.target, snapshot.profile)
+                                : suggestion.proposal_id}
+                            </strong>
+                            {suggestion.issues.length > 0 ? (
+                              <span className="verdict verdict-flagged">
+                                <IconAlert width={13} height={13} aria-hidden="true" />
+                                Flagged ({suggestion.issues.length})
+                              </span>
+                            ) : (
+                              <span className="verdict">
+                                <IconCheck width={13} height={13} aria-hidden="true" />
+                                Critic Checked
+                              </span>
+                            )}
+                          </div>
+                          <p className="suggestion-text">{suggestion.text}</p>
+                          {suggestion.issues.length > 0 ? (
+                            <ul className="issues" aria-label="Suggestion issues">
+                              {suggestion.issues.map((issue, idx) => (
+                                <li key={idx}>{issue}</li>
+                              ))}
+                            </ul>
+                          ) : null}
+                          {staleNotice || isStale ? (
+                            <p className="ev-note" role="status">
+                              {staleNotice ??
+                                "Proposal changed since this draft was created. Ask for a fresh revision."}
+                            </p>
+                          ) : null}
+                          <div className="row">
+                            <button
+                              type="button"
+                              className="btn btn-small btn-primary"
+                              disabled={Boolean(isStale)}
+                              onClick={() => handleLoadSuggestionIntoEdit(m.id, suggestion)}
+                            >
+                              {isLoaded ? "Loaded into Edit" : "Load into Edit"}
+                            </button>
+                            <button
+                              type="button"
+                              className="text-link"
+                              onClick={() => openProposal(suggestion.proposal_id)}
+                            >
+                              View proposal
+                            </button>
+                          </div>
+                        </div>
+                      ) : null}
+                    </div>
+                  );
+                })}
                 {streamingTokens ? (
                   <div className="msg msg-assistant msg-streaming">
                     <span className="msg-who">Assistant</span>
@@ -575,9 +1057,10 @@ export function App() {
 
               {snapshot.status === "review" ? (
                 <div className="chat-hold" role="status">
-                  <strong>Chat is paused for your review</strong>
+                  <strong>Review in progress — ask questions or request draft edits</strong>
                   <p>
-                    Decide on the proposals first.{" "}
+                    Questions and draft suggestions stay in your local review buffer until you
+                    submit{" "}
                     <button
                       type="button"
                       className="text-link"
@@ -587,30 +1070,53 @@ export function App() {
                     </button>
                   </p>
                 </div>
-              ) : (
-                <form className="composer" onSubmit={(e) => void handleSendMessage(e)}>
-                  <label htmlFor="concierge-chat-input" className="sr-only">
-                    Message the assistant
-                  </label>
-                  <textarea
-                    id="concierge-chat-input"
-                    className="field composer-input"
-                    rows={3}
-                    placeholder="Ask why a line changed, or ask for a revision…"
-                    value={chatInput}
-                    disabled={sendingMessage || snapshot.status === "running"}
-                    onChange={(e) => setChatInput(e.target.value)}
-                  />
-                  <button
-                    type="submit"
-                    className="btn btn-primary composer-send"
-                    disabled={sendingMessage || snapshot.status === "running" || !chatInput.trim()}
-                  >
-                    <IconSend width={15} height={15} aria-hidden="true" />
-                    Send
-                  </button>
-                </form>
-              )}
+              ) : null}
+
+              <form className="composer" onSubmit={(e) => void handleSendMessage(e)}>
+                {focusedProposalId ? (
+                  <div className="ask-chip">
+                    <span>
+                      Asking about:{" "}
+                      <strong>
+                        {focusedProposal
+                          ? targetName(focusedProposal.target, snapshot.profile)
+                          : focusedProposalId}
+                      </strong>
+                    </span>
+                    <button
+                      type="button"
+                      className="text-link"
+                      onClick={() => setFocusedProposalId(null)}
+                    >
+                      Clear
+                    </button>
+                  </div>
+                ) : null}
+                <label htmlFor="concierge-chat-input" className="sr-only">
+                  Message the assistant
+                </label>
+                <textarea
+                  id="concierge-chat-input"
+                  className="field composer-input"
+                  rows={3}
+                  placeholder={
+                    focusedProposal
+                      ? `Ask a question or request an edit for ${targetName(focusedProposal.target, snapshot.profile)}…`
+                      : "Ask why a line changed, or ask for a revision…"
+                  }
+                  value={chatInput}
+                  disabled={sendingMessage || snapshot.status === "running"}
+                  onChange={(e) => setChatInput(e.target.value)}
+                />
+                <button
+                  type="submit"
+                  className="btn btn-primary composer-send"
+                  disabled={sendingMessage || snapshot.status === "running" || !chatInput.trim()}
+                >
+                  <IconSend width={15} height={15} aria-hidden="true" />
+                  Send
+                </button>
+              </form>
 
               {mockActive ? (
                 <div className="sim" aria-label="Demo states">
@@ -646,23 +1152,58 @@ export function App() {
                   score={score}
                   reports={snapshot.reports}
                   gap={snapshot.gap}
-                  proposals={snapshot.proposals}
+                  proposals={allProposals}
+                  profile={snapshot.profile}
                   selected={shownStaff}
                   onSelect={(node) => setSelectedStaff(node)}
                   onOpenProposal={openProposal}
                 />
               ) : null}
               {activeTab === "review" ? (
-                <ReviewPanel
-                  proposals={snapshot.proposals}
-                  initialDecisions={snapshot.decisions}
-                  drafts={reviewDrafts}
-                  onDraftsChange={setReviewDrafts}
-                  isReviewPending={snapshot.status === "review"}
-                  submitting={submittingReview}
-                  onOpenStaff={openStaff}
-                  onSubmitReview={handleSubmitReview}
-                />
+                <>
+                  {reviewConflict ? (
+                    <div className="cue cue-warn" role="alert">
+                      <strong>Saved decisions changed</strong>
+                      <p>
+                        {draftNotice ||
+                          "Your drafts are preserved. Compare them with the latest saved decisions before choosing which to keep."}
+                      </p>
+                      <div className="row">
+                        <button
+                          type="button"
+                          className="btn"
+                          onClick={() => reconcileConflict(true)}
+                        >
+                          Keep my edited drafts on the latest version
+                        </button>
+                        <button
+                          type="button"
+                          className="btn"
+                          onClick={() => reconcileConflict(false)}
+                        >
+                          Reload saved decisions
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
+                  <ReviewPanel
+                    proposals={allProposals}
+                    profile={snapshot.profile}
+                    linkedinGuidance={snapshot.linkedin_guidance}
+                    locked={reviewConflict || sendingMessage}
+                    initialDecisions={snapshot.decisions}
+                    drafts={reviewDrafts}
+                    onDraftsChange={handleReviewDraftsChange}
+                    isReviewPending={snapshot.status === "review"}
+                    isReviewed={snapshot.reviewed}
+                    submitting={submittingReview}
+                    amending={amendingReview}
+                    onOpenStaff={openStaff}
+                    onAskAboutProposal={handleAskAboutProposal}
+                    onSubmitReview={handleSubmitReview}
+                    onAmendReview={handleAmendReview}
+                  />
+                </>
               ) : null}
               {activeTab === "export" ? (
                 <ExportPanel snapshot={snapshot} onApiError={(err) => handleApiError(err)} />
@@ -676,6 +1217,7 @@ export function App() {
               onOpenReview={() => setActiveTab("review")}
               onOpenExport={() => setActiveTab("export")}
               onResume={() => void handleResumeInterrupted()}
+              onOpenReanalyze={() => openReanalyzeDialog()}
               resuming={resumingRun}
               exportOpen={activeTab === "export"}
             />

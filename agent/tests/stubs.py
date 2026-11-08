@@ -106,6 +106,15 @@ class Script:
             return call("request_analysis", title=TARGET.title)
         return AIMessage(content="Your match score is in. Review the proposals on the right.")
 
+    def advisory(self, messages):
+        return call(
+            "AdvisoryAnswer",
+            answer=(
+                "Your saved resume and proposals are available. "
+                "Tell me which section you want to discuss."
+            ),
+        )
+
     def intake(self, messages):
         has_linkedin = "linkedin" in messages[-1].content
         linkedin = {"headline": "Engineer at Fintech Co", "about": "I write code."}
@@ -208,6 +217,7 @@ class Script:
 
 
 ROLES = {
+    "advisory": "You are the review assistant of Agentic Resume",
     "concierge": "You are the assistant of Agentic Resume",
     "intake": "Turn the resume",
     "researcher": "researcher on a team",

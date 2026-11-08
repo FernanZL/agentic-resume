@@ -9,17 +9,13 @@ Read these in order before changing anything:
 4. `docs/STATUS.md`: what is done and what is next
 5. For any UI work: `PRODUCT.md` (who it's for) and `DESIGN.md` (the visual system, "The Score"). The direction contract is in `.impeccable/surfaces/`
 
-## Who owns what
+## Work authorization and coordination
 
-Several agents work in this repo at once. Edit only your own paths.
+Any agent may work in any part of this project when the user or the orchestrator agent authorizes that scope. Ownership is not tied to a particular agent or model; the original implementation assignments are historical, not access restrictions.
 
-| Path | Owner |
-|---|---|
-| `agent/schemas.py`, `backend/schemas.py`, `docs/CONTRACT.md` (the contract) | Claude (lead) |
-| `agent/` (graphs, nodes, prompts), `backend/`, Docker, `render.yaml` | Claude (lead) |
-| `agent/tools/` (and its tests in `agent/tools/tests/`) | argon |
-| `web/` | argon |
-| reviews (read-only) | sol |
+Several agents may work in this repo at once. Follow the current task assignments, coordinate overlapping edits with the orchestrator, and preserve other agents' and the user's work. A read-only review assignment remains read-only unless the user or orchestrator authorizes implementation.
+
+Contract changes in `agent/schemas.py`, `backend/schemas.py`, and `docs/CONTRACT.md` must stay consistent and be coordinated with the orchestrator when one is active. Historical owner references in other documents do not override authorization under this policy.
 
 ## Commands
 

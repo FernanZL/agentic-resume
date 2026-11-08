@@ -2,7 +2,8 @@
  * The evidence behind the score: each researcher's report and the gap analysis.
  */
 
-import type { GapReport, Report, Source } from "../api";
+import type { CandidateProfile, GapReport, Report, Source } from "../api";
+import { targetName } from "../score";
 
 function List({ items, title }: { items: string[]; title: string }) {
   if (!items.length) return null;
@@ -110,28 +111,47 @@ export function ReportView({ report }: { report: Report }) {
   }
   if (report.linkedin) {
     const li = report.linkedin;
+    const basis = li.basis ?? "profile";
+    const basisLabel =
+      basis === "resume_only"
+        ? "Preparation based on your resume — your LinkedIn profile was not inspected"
+        : basis === "public"
+          ? "Audited from your public LinkedIn profile"
+          : "Audited from your supplied LinkedIn profile";
     return (
       <div className="ev">
+        <p className="ev-note">
+          <strong>Basis:</strong> {basisLabel}
+        </p>
         <p className="ev-summary">{li.summary}</p>
         <div className="ev-cols">
           <List title="Headline" items={li.headline_issues} />
           <List title="About" items={li.about_issues} />
-          <List title="On your resume, missing on LinkedIn" items={li.experience_gaps} />
+          <List
+            title={
+              basis === "resume_only"
+                ? "Experience & projects to highlight on LinkedIn"
+                : "On your resume, missing on LinkedIn"
+            }
+            items={li.experience_gaps}
+          />
           <List title="Dates or titles that disagree" items={li.inconsistencies} />
+          <List title="Limitations & notes" items={li.limitations ?? []} />
         </div>
+        <Sources sources={li.sources ?? []} />
       </div>
     );
   }
   return <p className="ev-note">This report is empty.</p>;
 }
 
-export function GapView({ gap }: { gap: GapReport }) {
+export function GapView({ gap, profile }: { gap: GapReport; profile?: CandidateProfile | null }) {
   return (
     <div className="ev">
       <p className="ev-summary">
-        <strong>{gap.score} / 100</strong> overall match · {Math.round(gap.keyword_coverage * 100)}%
-        of the role&apos;s keywords found ({gap.matched_keywords.length} of{" "}
-        {gap.matched_keywords.length + gap.missing_keywords.length}
+        <strong>{gap.score} / 100</strong> original resume match ·{" "}
+        {Math.round(gap.keyword_coverage * 100)}% of the role&apos;s keywords found (
+        {gap.matched_keywords.length} of {gap.matched_keywords.length + gap.missing_keywords.length}
         ).
       </p>
       <div className="ev-cols">
@@ -155,7 +175,9 @@ export function GapView({ gap }: { gap: GapReport }) {
         <List title="Format issues an ATS may trip on" items={gap.format_issues} />
       </div>
       {gap.weak_bullets.length ? (
-        <p className="ev-note">Weak bullets: {gap.weak_bullets.join(", ")}</p>
+        <p className="ev-note">
+          Weak bullets: {gap.weak_bullets.map((b) => targetName(b, profile)).join(", ")}
+        </p>
       ) : null}
     </div>
   );

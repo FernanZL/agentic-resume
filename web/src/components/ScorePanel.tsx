@@ -5,7 +5,7 @@
  */
 
 import { useEffect, useState } from "react";
-import type { GapReport, Proposal, Report } from "../api";
+import type { CandidateProfile, GapReport, Proposal, Report } from "../api";
 import {
   REPEATED,
   STAVES,
@@ -113,6 +113,7 @@ export interface ScorePanelProps {
   reports: Record<string, Report>;
   gap: GapReport | null;
   proposals: Proposal[];
+  profile?: CandidateProfile | null;
   selected: StaffNode;
   onSelect: (node: StaffNode) => void;
   onOpenProposal: (id: string) => void;
@@ -123,6 +124,7 @@ export function ScorePanel({
   reports,
   gap,
   proposals,
+  profile,
   selected,
   onSelect,
   onOpenProposal,
@@ -265,6 +267,7 @@ export function ScorePanel({
         reports={reports}
         gap={gap}
         proposals={proposals}
+        profile={profile}
         end={end}
         onOpenProposal={onOpenProposal}
       />
@@ -278,6 +281,7 @@ function Part({
   reports,
   gap,
   proposals,
+  profile,
   end,
   onOpenProposal,
 }: {
@@ -286,6 +290,7 @@ function Part({
   reports: Record<string, Report>;
   gap: GapReport | null;
   proposals: Proposal[];
+  profile?: CandidateProfile | null;
   end: number;
   onOpenProposal: (id: string) => void;
 }) {
@@ -341,7 +346,7 @@ function Part({
 
       {node === "gap_analysis" ? (
         gap ? (
-          <GapView gap={gap} />
+          <GapView gap={gap} profile={profile} />
         ) : (
           <p className="ev-note">The gap analysis runs after the research.</p>
         )
@@ -359,7 +364,8 @@ function Part({
                   title={p.id}
                   onClick={() => onOpenProposal(p.id)}
                 >
-                  {p.document === "resume" ? "Resume" : "LinkedIn"} · {targetName(p.target)}
+                  {p.document === "resume" ? "Resume" : "LinkedIn"} ·{" "}
+                  {targetName(p.target, profile)}
                 </button>
                 <span>{p.status === "flagged" ? "flagged by the critic" : "checked"}</span>
               </li>

@@ -9,19 +9,27 @@ import { App } from "../App";
 import {
   type ExportJson,
   type SessionSnapshot,
+  formatProfileAsMarkdown,
   formatRunFailedError,
+  getLinkedInCopyIssues,
+  getLinkedInGuidance,
   parseSessionIdFromPath,
   reconcileReviewDrafts,
+  roleSections,
   setMockMode,
 } from "../api";
 import { ExportPanel } from "../components/ExportPanel";
+import { GapView, ReportView } from "../components/Reports";
 import { ReviewPanel } from "../components/ReviewPanel";
 import { HttpError, getStoredPasscode, request, setStoredPasscode } from "../connection";
 import {
+  MOCK_CANDIDATE_PROFILE,
+  MOCK_GAP_REPORT,
   MOCK_PROPOSALS,
   buildMockEventStream,
   createDemoReviewMockSnapshot,
 } from "../mock/fixtures";
+import { targetName } from "../score";
 
 describe("connection.ts HTTP transport & passcode header", () => {
   beforeEach(() => {
@@ -94,6 +102,68 @@ describe("Event contract & run_failed error mapping", () => {
 });
 
 describe("ReviewPanel component & draft reconciliation", () => {
+  it("starts undecided and bulk accepts only untouched passed proposals", async () => {
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+    render(
+      <ReviewPanel
+        proposals={MOCK_PROPOSALS}
+        initialDecisions={{}}
+        isReviewPending={true}
+        submitting={false}
+        onSubmitReview={onSubmit}
+      />,
+    );
+    expect(screen.queryAllByRole("radio", { checked: true })).toHaveLength(0);
+    const passed = MOCK_PROPOSALS.filter((p) => p.status === "ok");
+    const edited = passed[0]!;
+    const rejected = passed[1]!;
+    const editedRow = screen.getByRole("listitem", { name: `Proposal ${edited.id}` });
+    const rejectedRow = screen.getByRole("listitem", { name: `Proposal ${rejected.id}` });
+    fireEvent.click(within(editedRow).getByRole("radio", { name: "Edit" }));
+    fireEvent.change(screen.getByLabelText(`Edit text for ${edited.id}`), {
+      target: { value: "My own reviewed text." },
+    });
+    fireEvent.click(within(rejectedRow).getByRole("radio", { name: "Reject" }));
+    const bulk = screen.getByRole("button", { name: /Accept all that passed/ });
+    fireEvent.click(bulk);
+    expect(bulk).toBeDisabled();
+    expect(within(editedRow).getByRole("radio", { name: "Edit" })).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+    fireEvent.click(screen.getByRole("button", { name: /Submit Review & Finalize/ }));
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledOnce());
+    const submitted = onSubmit.mock.calls[0]![0];
+    expect(submitted[edited.id]).toEqual({ action: "edit", text: "My own reviewed text." });
+    expect(submitted[rejected.id]).toEqual({ action: "reject", text: "" });
+    for (const proposal of MOCK_PROPOSALS) {
+      if (proposal.id === edited.id || proposal.id === rejected.id) continue;
+      expect(submitted[proposal.id].action).toBe(proposal.status === "ok" ? "accept" : "reject");
+    }
+  });
+
+  it("rejects undecided proposals on submit and restores saved decisions", async () => {
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+    const saved = MOCK_PROPOSALS[0]!;
+    render(
+      <ReviewPanel
+        proposals={MOCK_PROPOSALS}
+        initialDecisions={{ [saved.id]: { action: "edit", text: "Saved text" } }}
+        isReviewPending={true}
+        submitting={false}
+        onSubmitReview={onSubmit}
+      />,
+    );
+    expect(screen.getByLabelText(`Edit text for ${saved.id}`)).toHaveValue("Saved text");
+    fireEvent.click(screen.getByRole("button", { name: /Submit Review & Finalize/ }));
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledOnce());
+    const submitted = onSubmit.mock.calls[0]![0];
+    expect(submitted[saved.id]).toEqual({ action: "edit", text: "Saved text" });
+    for (const proposal of MOCK_PROPOSALS.filter((p) => p.id !== saved.id)) {
+      expect(submitted[proposal.id].action).toBe("reject");
+    }
+  });
+
   it("highlights [X]% placeholders, displays critic issues, supports inline edit and Accept All OK", async () => {
     const onSubmit = vi.fn().mockResolvedValue(undefined);
 
@@ -167,12 +237,44 @@ describe("ReviewPanel component & draft reconciliation", () => {
 
     expect(reconciled["stale:id"]).toBeUndefined();
     expect(reconciled[p1.id]?.text).toBe("My custom summary");
-    expect(reconciled[p2.id]?.action).toBe("accept");
+    expect(reconciled[p2.id]?.action).toBeNull();
     expect(reconciled[p2.id]?.text).toBe("Brand new proposed text after revision");
+    const reviewedRevision = reconcileReviewDrafts(
+      [p2Revised],
+      { [p2.id]: { action: "accept", text: "" } },
+      edited,
+    );
+    expect(reviewedRevision[p2.id]?.action).toBe("accept");
+    const preserved = reconcileReviewDrafts([p2Revised], {}, edited, {
+      preserveEditsOnConflict: true,
+    });
+    expect(preserved[p2.id]?.text).toBe("My custom bullet");
+    expect(preserved[p2.id]?.stale).toBe(true);
+    expect(preserved[p2.id]?.proposedAtDraft).toBe(p2.proposed);
   });
 });
 
 describe("ExportPanel live mode & snapshot.reviewed gating", () => {
+  it("copies the exact server Markdown artifact, including retained sections", async () => {
+    setMockMode(false);
+    const markdown = "# Approved headline\n\n## Certifications\nExact approved content.\n";
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) =>
+      String(input).endsWith("format=md")
+        ? new Response(markdown, { headers: { "Content-Type": "text/markdown" } })
+        : new Response(JSON.stringify({ resume: MOCK_CANDIDATE_PROFILE, linkedin: {} })),
+    );
+    render(
+      <ExportPanel
+        snapshot={{ ...createDemoReviewMockSnapshot("copy"), reviewed: true }}
+        onApiError={vi.fn()}
+      />,
+    );
+    fireEvent.click(await screen.findByRole("button", { name: /^Copy Markdown$/i }));
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith(markdown));
+  });
+
   afterEach(() => {
     setMockMode(false);
     vi.restoreAllMocks();
@@ -302,7 +404,9 @@ describe("App end-to-end mocked workflow, chat failure rollback & /s/<session_id
     fireEvent.click(reviewSimBtn);
 
     await waitFor(() => {
-      expect(screen.getByText(/Chat is paused for your review/i)).toBeInTheDocument();
+      expect(
+        screen.getByText(/Review in progress — ask questions or request draft edits/i),
+      ).toBeInTheDocument();
     });
 
     // Edit a proposal, switch away to Timeline tab, then switch back to Review tab and verify draft persists.
@@ -343,7 +447,7 @@ describe("App end-to-end mocked workflow, chat failure rollback & /s/<session_id
 
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
       const url = String(input);
-      if (url.endsWith("/messages") && init?.method === "POST") {
+      if ((url.endsWith("/messages") || url.endsWith("/ask")) && init?.method === "POST") {
         return new Response(JSON.stringify({ detail: "budget_exceeded" }), { status: 429 });
       }
       if (url.includes("/api/sessions/s-chat-fail")) {
@@ -394,7 +498,7 @@ describe("App end-to-end mocked workflow, chat failure rollback & /s/<session_id
     });
 
     expect(
-      screen.getByRole("button", { name: /72\s*\/100 match for this role/i }),
+      screen.getByRole("button", { name: /72\s*\/100 original resume match for this role/i }),
     ).toBeInTheDocument();
     expect(screen.getAllByText(/Waiting for your review/i).length).toBeGreaterThan(0);
 
@@ -414,5 +518,381 @@ describe("App end-to-end mocked workflow, chat failure rollback & /s/<session_id
     fireEvent.click(screen.getByRole("button", { name: /Start a new session/i }));
     expect(window.location.pathname).toBe("/");
     expect(screen.getByRole("button", { name: /Start the analysis/i })).toBeInTheDocument();
+  });
+
+  it("resolves actual role and project titles in targetName, GapView, and preserves section grouping & Markdown fidelity", () => {
+    expect(targetName("exp0.b0", MOCK_CANDIDATE_PROFILE)).toBe(
+      "Lead Software Engineer — Solstice Telemetry Inc. · bullet 1",
+    );
+    expect(targetName("exp2", MOCK_CANDIDATE_PROFILE)).toBe(
+      "OpenTelemetry Tail-Sampler CLI — Open Source",
+    );
+    expect(targetName("edu0.details", MOCK_CANDIDATE_PROFILE)).toBe(
+      "B.S. in Computer Science — Cascadia State University · details",
+    );
+
+    const sections = roleSections(MOCK_CANDIDATE_PROFILE);
+    expect(sections.map(([h]) => h)).toEqual(["Experience", "Projects"]);
+    expect(sections[0]?.[1].map((r) => r.id)).toEqual(["exp0", "exp1"]);
+    expect(sections[1]?.[1].map((r) => r.id)).toEqual(["exp2"]);
+
+    const md = formatProfileAsMarkdown(
+      MOCK_CANDIDATE_PROFILE,
+      "Overridden Target Title Should Not Replace Headline",
+    );
+    expect(md).toContain(`**${MOCK_CANDIDATE_PROFILE.headline}**`);
+    expect(md).not.toContain("Overridden Target Title Should Not Replace Headline");
+    expect(md).toContain("## Experience");
+    expect(md).toContain("## Projects");
+    expect(md).toContain("## Certifications");
+    expect(md).toContain("CKA — Certified Kubernetes Administrator (2024)");
+    expect(md).toContain("## Other");
+
+    render(<GapView gap={MOCK_GAP_REPORT} profile={MOCK_CANDIDATE_PROFILE} />);
+    expect(
+      screen.getByText(/Lead Software Engineer — Solstice Telemetry Inc. · bullet 3/i),
+    ).toBeInTheDocument();
+  });
+
+  it("renders LinkedIn resume_only basis clearly and provides project vs experience placement guidance", () => {
+    render(
+      <ReportView
+        report={{
+          kind: "linkedin",
+          linkedin: {
+            basis: "resume_only",
+            summary: "Prepared LinkedIn profile recommendations directly from your resume.",
+            headline_issues: ["Add target distributed systems keywords."],
+            about_issues: [],
+            experience_gaps: ["Highlight RaftKV consensus engine project."],
+            inconsistencies: [],
+            steps: [],
+            sources: [],
+            limitations: ["LinkedIn URL was private; recommendations are grounded in your resume."],
+          },
+        }}
+      />,
+    );
+
+    expect(
+      screen.getByText(
+        /Preparation based on your resume — your LinkedIn profile was not inspected/i,
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/Experience & projects to highlight on LinkedIn/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/LinkedIn URL was private; recommendations are grounded in your resume/i),
+    ).toBeInTheDocument();
+
+    const projectGuidance = getLinkedInGuidance("exp2", MOCK_CANDIDATE_PROFILE);
+    expect(projectGuidance.section).toContain("Projects");
+    expect(projectGuidance.field).toContain("Projects description");
+    expect(projectGuidance.verified).toBe(false);
+
+    const issues = getLinkedInCopyIssues("headline", "x".repeat(240), MOCK_CANDIDATE_PROFILE);
+    expect(issues.some((i) => i.includes("220"))).toBe(true);
+  });
+
+  it("preserves edited text after a stale review and requires explicit reconciliation", async () => {
+    setMockMode(false);
+    let snap = { ...createDemoReviewMockSnapshot("stale-review"), revision: "v1" };
+    let submitted: { expected_revision?: string } | null = null;
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      if (String(input).endsWith("/review") && init?.method === "POST") {
+        submitted = JSON.parse(String(init.body));
+        snap = {
+          ...snap,
+          revision: "v2",
+          proposals: snap.proposals.map((p) =>
+            p.target === "summary" ? { ...p, proposed: "Another saved summary" } : p,
+          ),
+        };
+        return new Response(JSON.stringify({ detail: "stale_review" }), { status: 409 });
+      }
+      return new Response(JSON.stringify(snap), {
+        headers: { "Content-Type": "application/json" },
+      });
+    });
+    window.history.pushState({}, "", "/s/stale-review");
+    render(<App />);
+    const card = await screen.findByLabelText("Proposal resume:summary");
+    fireEvent.click(within(card).getByRole("radio", { name: "Edit" }));
+    fireEvent.change(screen.getByLabelText("Edit text for resume:summary"), {
+      target: { value: "Keep my own wording" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Submit Review & Finalize/i }));
+    await screen.findByText("Saved decisions changed");
+    expect(submitted).toMatchObject({ expected_revision: "v1" });
+    expect(screen.getByLabelText("Edit text for resume:summary")).toHaveValue(
+      "Keep my own wording",
+    );
+    expect(screen.getByRole("button", { name: /Submit Review & Finalize/i })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: /Keep my edited drafts/i }));
+    expect(screen.queryByText("Saved decisions changed")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Edit text for resume:summary")).toHaveValue(
+      "Keep my own wording",
+    );
+  });
+
+  it("supports review-time /ask suggestions, explicit Load into Edit preserving rejections and issues, and new proposal additions", async () => {
+    setMockMode(false);
+    const snap = createDemoReviewMockSnapshot("s-ask-review");
+    let submittedBody: unknown = null;
+
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith("/api/sessions/s-ask-review/ask") && init?.method === "POST") {
+        return new Response(
+          JSON.stringify({
+            message: {
+              id: "msg-ask-1",
+              role: "assistant",
+              content: "Here is a flagged revision for your summary and a new certification entry.",
+            },
+            suggestion: {
+              proposal_id: "resume:summary",
+              text: "Drafted summary with unconfirmed [X]% latency reduction.",
+              issues: ["Contains unconfirmed placeholder [X]%"],
+              proposed_at_request: snap.proposals[0]!.proposed,
+            },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      if (url.endsWith("/api/sessions/s-ask-review/review") && init?.method === "POST") {
+        submittedBody = JSON.parse(String(init.body));
+        return new Response(JSON.stringify({ session_id: "s-ask-review", run_id: "run-2" }), {
+          status: 202,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      if (url.includes("/api/sessions/s-ask-review")) {
+        return new Response(JSON.stringify(snap), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      return new Response(JSON.stringify({ status: "ok", database: true }), { status: 200 });
+    });
+
+    window.history.pushState({}, "", "/s/s-ask-review");
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Grounded Rewrite Proposals \(6\)/i)).toBeInTheDocument();
+    });
+
+    // Reject the second proposal first to verify Load into Edit preserves rejections.
+    const secondCard = screen.getByLabelText("Proposal resume:exp0.b0");
+    fireEvent.click(within(secondCard).getByRole("radio", { name: "Reject" }));
+
+    // Send a review-time question via /ask
+    const chatBox = screen.getByLabelText(/Message the assistant/i);
+    fireEvent.change(chatBox, { target: { value: "Shorten my summary" } });
+    fireEvent.click(screen.getByRole("button", { name: /^Send$/i }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /Load into Edit/i })).toBeInTheDocument();
+    });
+    expect(screen.getByText(/Flagged \(1\)/i)).toBeInTheDocument();
+
+    // Load into Edit explicitly
+    fireEvent.click(screen.getByRole("button", { name: /Load into Edit/i }));
+
+    const editTextarea = screen.getByLabelText(
+      "Edit text for resume:summary",
+    ) as HTMLTextAreaElement;
+    expect(editTextarea.value).toBe("Drafted summary with unconfirmed [X]% latency reduction.");
+
+    // Verify the flagged issue is retained on the proposal card and second card's rejection is preserved
+    const firstCard = screen.getByLabelText("Proposal resume:summary");
+    expect(within(firstCard).getByText(/Advisory Flagged/i)).toBeInTheDocument();
+    expect(
+      within(firstCard).getByText(/Contains unconfirmed placeholder \[X\]%/i),
+    ).toBeInTheDocument();
+    expect(within(secondCard).getByRole("radio", { name: "Reject" })).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Submit Review & Finalize/i }));
+    await waitFor(() => {
+      expect(submittedBody).not.toBeNull();
+    });
+    const decisions = (
+      submittedBody as { decisions: Record<string, { action: string; text: string }> }
+    ).decisions;
+    expect(decisions["resume:summary"]).toEqual({
+      action: "edit",
+      text: "Drafted summary with unconfirmed [X]% latency reduction.",
+    });
+    expect(decisions["resume:exp0.b0"]?.action).toBe("reject");
+  });
+
+  it("intercepts /reanalyze in chat to open confirmation UI and calls POST /reanalyze when confirmed", async () => {
+    setMockMode(false);
+    const idleSnap: SessionSnapshot = {
+      ...createDemoReviewMockSnapshot("s-reanalyze"),
+      session_id: "s-reanalyze",
+      status: "idle",
+      reviewed: true,
+    };
+    let reanalyzePayload: unknown = null;
+
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith("/api/sessions/s-reanalyze/reanalyze") && init?.method === "POST") {
+        reanalyzePayload = JSON.parse(String(init.body));
+        return new Response(JSON.stringify({ session_id: "s-reanalyze", run_id: "run-re" }), {
+          status: 202,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      if (url.includes("/api/sessions/s-reanalyze")) {
+        return new Response(JSON.stringify(idleSnap), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      return new Response(JSON.stringify({ status: "ok", database: true }), { status: 200 });
+    });
+
+    window.history.pushState({}, "", "/s/s-reanalyze");
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/Message the assistant/i)).not.toBeDisabled();
+    });
+
+    const chatBox = screen.getByLabelText(/Message the assistant/i);
+    fireEvent.change(chatBox, { target: { value: "/reanalyze Principal Systems Architect" } });
+    fireEvent.click(screen.getByRole("button", { name: /^Send$/i }));
+
+    // Confirmation dialog opens instead of sending /reanalyze to /messages or /ask
+    const confirmForm = await screen.findByRole("form", { name: /Confirm fresh analysis/i });
+    expect(confirmForm).toBeInTheDocument();
+
+    fireEvent.click(
+      within(confirmForm).getByRole("button", { name: /Confirm & Start Fresh Analysis/i }),
+    );
+
+    await waitFor(() => {
+      expect(reanalyzePayload).toMatchObject({
+        target: expect.objectContaining({ title: "Principal Systems Architect" }),
+        confirmed: true,
+      });
+    });
+  });
+
+  it("stages new proposal rows from suggestion.proposal on Load into Edit and sends additions on POST /amend", async () => {
+    setMockMode(false);
+    const reviewedSnap: SessionSnapshot = {
+      ...createDemoReviewMockSnapshot("s-amend"),
+      session_id: "s-amend",
+      status: "idle",
+      reviewed: true,
+    };
+    let amendBody: unknown = null;
+
+    const newEduProposal = {
+      id: "resume:edu0.details",
+      document: "resume" as const,
+      target: "edu0.details",
+      original: "Focus: Distributed Systems & Compilers",
+      proposed: "Focus: Distributed Systems, Consensus & Compilers (GPA 3.9)",
+      reason: "Added consensus coursework per user request.",
+      evidence: ["Resume education"],
+      issues: [],
+    };
+
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith("/api/sessions/s-amend/ask") && init?.method === "POST") {
+        return new Response(
+          JSON.stringify({
+            message: {
+              id: "msg-ask-edu",
+              role: "assistant",
+              content: "Created a staged education proposal for your review.",
+            },
+            suggestion: {
+              proposal_id: "resume:edu0.details",
+              text: "Focus: Distributed Systems, Consensus & Compilers (GPA 3.9)",
+              issues: [],
+              proposed_at_request: newEduProposal.proposed,
+              proposal: newEduProposal,
+            },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      if (url.endsWith("/api/sessions/s-amend/amend") && init?.method === "POST") {
+        amendBody = JSON.parse(String(init.body));
+        return new Response(
+          JSON.stringify({
+            ...reviewedSnap,
+            proposals: [...reviewedSnap.proposals, newEduProposal],
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      if (url.includes("/api/sessions/s-amend/export?format=json")) {
+        return new Response(
+          JSON.stringify({
+            resume: MOCK_CANDIDATE_PROFILE,
+            linkedin: { headline: MOCK_CANDIDATE_PROFILE.headline },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      if (url.includes("/api/sessions/s-amend")) {
+        return new Response(JSON.stringify(reviewedSnap), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      return new Response(JSON.stringify({ status: "ok", database: true }), { status: 200 });
+    });
+
+    window.history.pushState({}, "", "/s/s-amend");
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/Message the assistant/i)).not.toBeDisabled();
+    });
+
+    const chatBox = screen.getByLabelText(/Message the assistant/i);
+    fireEvent.change(chatBox, { target: { value: "Update my education details" } });
+    fireEvent.click(screen.getByRole("button", { name: /^Send$/i }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /Load into Edit/i })).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /Load into Edit/i }));
+
+    // New proposal row is staged in ReviewPanel (now 7 proposals)
+    await waitFor(() => {
+      expect(screen.getByText(/Grounded Rewrite Proposals \(7\)/i)).toBeInTheDocument();
+    });
+    expect(screen.getByLabelText("Edit text for resume:edu0.details")).toHaveValue(
+      "Focus: Distributed Systems, Consensus & Compilers (GPA 3.9)",
+    );
+
+    // Apply Reviewed Edits calls POST /amend with additions
+    fireEvent.click(screen.getByRole("button", { name: /Apply Reviewed Edits/i }));
+
+    await waitFor(() => {
+      expect(amendBody).not.toBeNull();
+    });
+    const parsed = amendBody as {
+      decisions: Record<string, { action: string; text: string }>;
+      additions?: Array<{ id: string }>;
+    };
+    expect(parsed.decisions["resume:edu0.details"]).toEqual({
+      action: "edit",
+      text: "Focus: Distributed Systems, Consensus & Compilers (GPA 3.9)",
+    });
+    expect(parsed.additions?.map((a) => a.id)).toContain("resume:edu0.details");
   });
 });

@@ -4,15 +4,19 @@ all; whatever is still flagged then reaches the user marked, with unverifiable n
 replaced by placeholders."""
 
 import json
+import re
 
 from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel
 
 from agent.events import emit, step
+from agent.linkedin_guidance import copy_issues
 from agent.llm import Models, structured
+from agent.nodes.gap import job_keywords
 from agent.nodes.writers import NODES as WRITERS
 from agent.prompts import prompt
-from agent.schemas import Document, Proposal, ProposalStatus
+from agent.render import apply_decisions, profile_markdown
+from agent.schemas import Action, Decision, Document, Proposal, ProposalStatus
 from agent.state import AnalysisState
 from agent.tools import ats
 from agent.tools.fetch_url import untrusted
@@ -46,6 +50,64 @@ def number_issues(proposal: Proposal, evidence: str) -> list[str]:
     return [f"Numbers not found in your documents: {', '.join(unsupported)}"] if unsupported else []
 
 
+def attribution_issues(proposal: Proposal, state: AnalysisState) -> list[str]:
+    """Prevent project evidence from being attributed to an unrelated employment entry."""
+    roles = {r.id: r for r in state["profile"].experience}
+    target = roles.get(proposal.target.removeprefix("new:").split(".")[0])
+    refs = [
+        roles[ref.split(".")[0]] for ref in proposal.evidence_refs if ref.split(".")[0] in roles
+    ]
+    if (
+        target
+        and target.kind == "employment"
+        and any(r.kind == "project" and r.id != target.id for r in refs)
+    ):
+        return ["Project evidence cannot be presented as work performed in this employment entry."]
+    if (
+        target
+        and target.kind == "project"
+        and re.search(
+            r"\b(?:employed by|hired by|employee (?:at|of)|paid role at)\b", proposal.proposed, re.I
+        )
+    ):
+        return ["This source entry is a project, not confirmed employment."]
+    return []
+
+
+def deterministic_issues(proposal: Proposal, state: AnalysisState) -> list[str]:
+    """Apply numerical, attribution and copy-format rules independently of model verdicts."""
+    issues = number_issues(proposal, sources(state)) + attribution_issues(proposal, state)
+    if proposal.document is Document.LINKEDIN:
+        issues += copy_issues(proposal.target, proposal.proposed, state["profile"])
+        issues += description_issues(proposal, state)
+    return issues
+
+
+def description_issues(proposal: Proposal, state: AnalysisState) -> list[str]:
+    """Keep role metadata out of the LinkedIn description paste field."""
+    target = proposal.target
+    if not re.fullmatch(r"(?:exp|li)\d+", target):
+        return []
+    roles = (
+        state["linkedin"].experience
+        if target.startswith("li") and state.get("linkedin")
+        else state["profile"].experience
+    )
+    index = int(target.removeprefix("exp").removeprefix("li"))
+    if index >= len(roles):
+        return []
+    role = roles[index]
+    first = proposal.proposed.splitlines()[0].strip() if proposal.proposed.strip() else ""
+    metadata = [part for part in (role.title, role.organization, role.start, role.end) if part]
+    if ("|" in first and sum(part in first for part in metadata) >= 2) or first.lower().startswith(
+        ("title:", "company:", "dates:")
+    ):
+        return [
+            "Paste only description text here; remove title, company and dates from this field."
+        ]
+    return []
+
+
 def with_placeholders(proposal: Proposal, evidence: str) -> Proposal:
     """The proposal with every unsupported number replaced, whole token by whole token,
     by [X]."""
@@ -69,8 +131,27 @@ def to_check(state: AnalysisState) -> dict[str, Proposal]:
     return {pid: proposals[pid] for pid in state.get("critique") or {} if pid in proposals}
 
 
+def keyword_issues(state: AnalysisState, checking: dict[str, Proposal]) -> dict[str, list[str]]:
+    """Flag rewrites that omit supported keywords or remove previously matched ones."""
+    proposals = {pid: p for pid, p in (state.get("proposals") or {}).items() if p}
+    keywords = job_keywords(state.get("reports") or {})
+    before = ats.keyword_coverage(profile_markdown(state["profile"]), keywords)
+    expected = list(dict.fromkeys([*before.matched, *(state.get("keyword_evidence") or {})]))
+    final = apply_decisions(
+        state["profile"],
+        None,
+        proposals,
+        {pid: Decision(action=Action.ACCEPT) for pid in proposals},
+    )
+    missing = ats.keyword_coverage(profile_markdown(final.resume), expected).missing
+    if not missing:
+        return {}
+    issue = "The proposed resume omits supported keywords: " + ", ".join(missing)
+    return {pid: [issue] for pid, p in checking.items() if p.document is Document.RESUME}
+
+
 async def judge(
-    models: Models, state: AnalysisState, proposals: dict[str, Proposal]
+    models: Models, state: AnalysisState, proposals: dict[str, Proposal], config: dict | None = None
 ) -> dict[str, list[str]]:
     """The model's issues per proposal id (only for the proposals asked about)."""
     if not proposals:
@@ -83,8 +164,10 @@ async def judge(
         [
             SystemMessage(prompt("critic")),
             HumanMessage(untrusted(state["profile"].model_dump_json(), "original profile")),
+            HumanMessage(untrusted(state["documents"]["resume"], "supplied resume")),
             HumanMessage("Proposals to check:\n" + json.dumps(payload, ensure_ascii=False)),
-        ]
+        ],
+        config=config,
     )
     issues = {pid: [UNCHECKED] for pid in proposals}  # no verdict is not a pass
     for verdict in verdicts.verdicts:
@@ -99,7 +182,9 @@ def make_critic(models: Models):
         rounds = state.get("critique_rounds", 0) + 1
         checking = to_check(state)
         evidence = sources(state)
-        flagged = {pid: number_issues(p, evidence) for pid, p in checking.items()}
+        flagged = {pid: deterministic_issues(p, state) for pid, p in checking.items()}
+        for pid, issues in keyword_issues(state, checking).items():
+            flagged[pid] = [*flagged[pid], *issues]
         for pid, issues in (await judge(models, state, checking)).items():
             flagged[pid] = [*flagged[pid], *issues]
         flagged = {pid: issues for pid, issues in flagged.items() if issues}

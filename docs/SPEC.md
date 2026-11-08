@@ -20,7 +20,7 @@ START ─► concierge ⇄ tools ──(route=analyze)──► analysis [subgra
 
 **Concierge (chat)** — bounded ReAct node (model-call limit per turn, like undercover's Copilot). It greets, asks clarifying questions in chat (missing JD, seniority, region), and when inputs are sufficient calls `request_analysis(target)`. State-changing tools (`request_analysis`, `revise_proposal`) take `InjectedToolCallId` and return `Command(update={"route": "analyze", "target": …, "messages": [ToolMessage(…)]})`; the conditional edge after `tools` goes **straight to `analysis`** when `route == "analyze"` (no extra LLM call), and `intake` resets `route=None` so `analysis → concierge` never loops. After analysis the concierge explains results and handles follow-ups via read tools (`get_report`, `explain_proposal`) and `revise_proposal(id, instruction)`, which rewrites one proposal, runs the critic checks inline, and returns `Command(update={"proposals": {id: new}})`.
 *Why:* the analysis graph is added with `add_node("analysis", analysis_graph)`, a native subgraph compiled **without** its own checkpointer argument (default → inherits the parent's; `checkpointer=False` would disable the persistence `interrupt` needs). Its `interrupt()` then propagates correctly and chat history stays valid (invoking a graph inside a tool would orphan tool calls on interrupt).
-**While a review is pending**, `POST /messages` returns `409 review_pending`; the UI shows the review panel. The only way forward is `POST /review` (or a "cancel review" decision that resumes with all proposals left undecided).
+**While a review is pending**, `POST /messages` still returns `409 review_pending` to protect the interrupted thread. The UI uses a separate budgeted `/ask` path for persisted questions and checked suggestions; that path never resumes or updates the analysis checkpoint. Suggestions can be loaded into browser edit drafts and applied explicitly through `/review`. Finished documents can be explicitly amended through `/amend`, with a content revision guard. A fresh analysis is a separate confirmed `/reanalyze` action, not a model-selected consequence of a question.
 
 **Analysis subgraph — deterministic map-reduce, no LLM supervisor** (routing is code; LLMs work inside nodes):
 
@@ -35,7 +35,7 @@ intake ─► plan ─Send×N─► [researchers] ─► gap_analysis ─► wri
 | `job_analyst` | bounded ReAct (≤4 tool calls), **private** message list inside the node; only the final report is written to `reports[kind]` (applies to all researchers) | `JobAnalysis`: must/nice-to-have skills, seniority, keywords | `fetch_url`, `web_search` |
 | `company_researcher` | bounded ReAct | `CompanyBrief`: product, stack, values, tone, news (+ source URLs) | `web_search`, `fetch_url` |
 | `market_analyst` | bounded ReAct | `MarketBrief`: title variants, adjacent in-demand skills, level signals | `web_search` |
-| `linkedin_auditor` | structured call | `LinkedInAudit`: headline/About/experience gaps | — |
+| `linkedin_auditor` | structured call, optional exact public profile retrieval | `LinkedInAudit`: headline/About/experience gaps | Tavily advanced profile search when a URL is supplied instead of an export |
 | `gap_analysis` | **code first** (keyword coverage, ATS format checks) + LLM rubric | `GapReport`: score 0–100, missing keywords, weak bullets, priorities | — |
 | `resume_writer` ∥ `linkedin_writer` | one structured call each over the **whole** document (coherent voice, no duplicated keywords) | `Proposal`s keyed by `proposal_id` (original, proposed, rationale, keywords, evidence refs) | — |
 | `critic` | code evidence check + LLM judge | flags invented numbers/claims, keyword stuffing, tone → loops back to writers (max 2) | — |
@@ -114,7 +114,7 @@ Dockerfile (multi-stage: node build → python/uv slim), docker-compose.yml, ren
 
 ## 6. Risks
 
-1. **LinkedIn**: never scrape (ToS + auth wall). Input = "Save to PDF" export or pasted text; auth-walled job URLs → concierge asks for pasted JD.
+1. **LinkedIn**: input = "Save to PDF" export, pasted text, or a supplied exact public profile URL. For URLs, Tavily advanced search with raw content retrieves only matching profile results; missing content falls back to an export or pasted text. No login or identity guessing. Direct auth-walled job URLs → concierge asks for pasted JD. This supersedes the original export-only restriction.
 2. **Fabrication**: evidence check in code + critic loop + placeholders + mandatory review.
 3. **Prompt injection** via resume/JD/web pages: screening fields in `intake` + sanitizing/delimiting in `fetch_url`.
 4. **Public demo cost**: daily budget breaker + access gate.

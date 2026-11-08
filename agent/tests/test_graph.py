@@ -2,9 +2,11 @@
 review pause inside the subgraph, re-analysis and revisions."""
 
 import itertools
+from dataclasses import replace
 
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
+from langchain_core.tools import tool
 from langgraph.types import Command
 
 from agent.checkpoints import memory_saver
@@ -112,7 +114,7 @@ async def test_after_the_review_the_concierge_is_told_the_analysis_is_done():
 
 def test_the_analysis_note_is_only_for_the_turn_back_from_the_analysis():
     def after(tool: str, analyzed: bool = True) -> dict:
-        reply = ToolMessage("done", name=tool, tool_call_id="c1")
+        reply = ToolMessage("Analysis started for Engineer.", name=tool, tool_call_id="c1")
         return {"analyzed": analyzed, "messages": [HumanMessage("go"), reply]}
 
     assert analysis_just_finished(after("request_analysis"))
@@ -120,6 +122,16 @@ def test_the_analysis_note_is_only_for_the_turn_back_from_the_analysis():
     for later in ("get_report", "explain_proposal", "revise_proposal"):
         assert not analysis_just_finished(after(later))
     assert not analysis_just_finished({"analyzed": True, "messages": [HumanMessage("why?")]})
+    assert not analysis_just_finished(
+        {
+            "analyzed": True,
+            "messages": [
+                ToolMessage(
+                    "The saved analysis was preserved.", name="request_analysis", tool_call_id="c1"
+                ),
+            ],
+        }
+    )
 
 
 def test_a_failing_tool_is_reported_without_its_message():
@@ -145,8 +157,40 @@ async def test_research_is_planned_from_what_is_known():
     target = TargetJob(title="Data Engineer")
     await run(graph, stubs.first_input(linkedin=False, target=target))
     _, analysis = await analysis_state(graph)
-    assert set(analysis["reports"]) == {"job", "market"}
+    assert set(analysis["reports"]) == {"job", "market", "linkedin"}
+    assert analysis["reports"]["linkedin"].linkedin.basis == "resume_only"
     assert analysis["linkedin"] is None
+
+
+@pytest.mark.parametrize("available", [True, False])
+async def test_linkedin_url_in_resume_is_audited_or_reports_an_actionable_fallback(available):
+    seen = []
+
+    @tool
+    async def linkedin_profile_search(url: str) -> str:
+        """Return a stubbed exact public profile without making a network call."""
+        seen.append(url)
+        return (
+            '<untrusted_content source="linkedin">Public headline</untrusted_content>'
+            if available
+            else "Unavailable: upload or paste your profile."
+        )
+
+    toolbox = replace(stubs.toolbox(), linkedin_search=linkedin_profile_search)
+    graph = build_graph(stubs.models(), toolbox, memory_saver())
+    first = stubs.first_input(linkedin=False)
+    first["documents"]["resume"] += "\nhttps://linkedin.com/in/alex-rivera"
+    events = await run(graph, first)
+    _, analysis = await analysis_state(graph)
+    report = analysis["reports"]["linkedin"]
+    assert seen == ["https://www.linkedin.com/in/alex-rivera"]
+    assert not report.error
+    if available:
+        assert report.linkedin.summary == "Headline is vague"
+    else:
+        assert report.linkedin.basis == "resume_only"
+        assert any("not inspected" in note for note in report.linkedin.limitations)
+    assert "alex-rivera" not in str(events)
 
 
 async def test_a_failing_researcher_reports_its_error_and_the_run_goes_on():
@@ -173,7 +217,7 @@ async def test_reanalysis_replaces_old_results_and_routes_once():
     await run(graph, stubs.first_input())
     await run(graph, Command(resume=resume_with({})))
     analysis_runs = script.critic_rounds
-    await run(graph, {"messages": [HumanMessage("Now try Platform Engineer at Initech")]})
+    await run(graph, {"messages": [HumanMessage("/reanalyze Platform Engineer at Initech")]})
 
     state, analysis = await analysis_state(graph)
     assert state.next == ("analysis",)
@@ -185,7 +229,7 @@ async def test_reanalysis_replaces_old_results_and_routes_once():
     assert set(analysis["proposals"]) == {"resume:summary", "resume:exp1.b0", "linkedin:headline"}
 
 
-async def test_revising_a_proposal_after_review_accepts_the_checked_rewrite():
+async def test_revising_after_review_returns_a_checked_draft_without_autoaccepting():
     turns = itertools.count()
 
     def concierge(messages):
@@ -216,9 +260,13 @@ async def test_revising_a_proposal_after_review_accepts_the_checked_rewrite():
 
     values = (await graph.aget_state(run_config("s1", "r1"))).values
     revised = values["proposals"]["linkedin:headline"]
-    assert revised.proposed == "Backend Engineer | [X] uptime"  # 99% wasn't in the documents
-    assert revised.status is ProposalStatus.FLAGGED
-    assert values["decisions"]["linkedin:headline"] == Decision(action=Action.ACCEPT)
+    assert revised.proposed == "Senior Backend Engineer · Payments APIs · Python & Kubernetes"
+    assert values["decisions"]["linkedin:headline"] == Decision(action=Action.REJECT)
+    assert any(
+        "Backend Engineer | [X] uptime" in m.text
+        for m in values["messages"]
+        if isinstance(m, ToolMessage)
+    )
 
 
 async def test_the_concierge_stops_after_its_call_limit():

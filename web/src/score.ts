@@ -4,7 +4,7 @@
  * pause is a fermata, so the time it took is removed from the axis.
  */
 
-import type { Event } from "./api";
+import type { CandidateProfile, Event, Experience } from "./api";
 
 export const STAVES = [
   { node: "concierge", name: "Assistant", part: "chat" },
@@ -279,20 +279,79 @@ export function toolName(tool: string): string {
   return TOOL_NAMES[tool] ?? tool.replace(/_/g, " ");
 }
 
-/** A proposal's target in words: "Experience 1 · bullet 2" rather than "exp0.b1". */
-export function targetName(target: string): string {
+function resolveRoleLabel(
+  indexOrId: string,
+  profile?: CandidateProfile | null,
+  fallbackPrefix = "Experience",
+): string {
+  if (profile) {
+    const idx = /^\d+$/.test(indexOrId) ? Number.parseInt(indexOrId, 10) : -1;
+    const role: Experience | undefined =
+      profile.experience.find((r) => r.id === (idx >= 0 ? `exp${idx}` : indexOrId)) ??
+      (idx >= 0 ? profile.experience[idx] : undefined);
+    if (role) {
+      const parts = [role.title, role.organization].filter(Boolean);
+      if (parts.length > 0) {
+        return parts.join(" — ");
+      }
+    }
+  }
+  const num = /^\d+$/.test(indexOrId) ? Number(indexOrId) + 1 : indexOrId;
+  return `${fallbackPrefix} ${num}`;
+}
+
+/** A proposal's target in words: actual role/project title or "Experience 1 · bullet 2" rather than "exp0.b1". */
+export function targetName(target: string, profile?: CandidateProfile | null): string {
+  const cleaned = target.replace(/^(resume|linkedin):/, "");
   const fixed: Record<string, string> = {
     summary: "Summary",
     headline: "Headline",
     skills: "Skills",
+    certifications: "Certifications",
+    languages: "Languages",
+    other: "Other",
     about: "About",
   };
-  if (fixed[target]) return fixed[target];
-  let m = /^exp(\d+)\.b(\d+)$/.exec(target);
-  if (m) return `Experience ${Number(m[1]) + 1} · bullet ${Number(m[2]) + 1}`;
-  m = /^new:exp(\d+)$/.exec(target);
-  if (m) return `Experience ${Number(m[1]) + 1} · new bullet`;
-  m = /^(exp|li)(\d+)$/.exec(target);
-  if (m) return `${m[1] === "li" ? "LinkedIn role" : "Experience"} ${Number(m[2]) + 1}`;
+  if (fixed[cleaned]) return fixed[cleaned];
+
+  let m = /^exp(\d+)\.b(\d+)$/.exec(cleaned);
+  if (m && m[1] && m[2]) {
+    const roleLabel = resolveRoleLabel(m[1], profile, "Experience");
+    return `${roleLabel} · bullet ${Number(m[2]) + 1}`;
+  }
+
+  m = /^new:exp(\d+)$/.exec(cleaned);
+  if (m && m[1]) {
+    const roleLabel = resolveRoleLabel(m[1], profile, "Experience");
+    return `${roleLabel} · new bullet`;
+  }
+
+  m = /^exp(\d+)\.(title|organization|location|start|end|source_section)$/.exec(cleaned);
+  if (m && m[1] && m[2]) {
+    const roleLabel = resolveRoleLabel(m[1], profile, "Experience");
+    const fieldLabel = m[2] === "source_section" ? "section heading" : m[2];
+    return `${roleLabel} · ${fieldLabel}`;
+  }
+
+  m = /^edu(\d+)\.(institution|degree|year|details)$/.exec(cleaned);
+  if (m && m[1] && m[2]) {
+    const idx = Number.parseInt(m[1], 10);
+    const edu = profile?.education[idx];
+    const eduLabel = edu
+      ? [edu.degree, edu.institution].filter(Boolean).join(" — ")
+      : `Education ${idx + 1}`;
+    return `${eduLabel} · ${m[2]}`;
+  }
+
+  m = /^li(\d+)$/.exec(cleaned);
+  if (m && m[1]) {
+    return `LinkedIn role ${Number(m[1]) + 1}`;
+  }
+
+  m = /^exp(\d+)$/.exec(cleaned);
+  if (m && m[1]) {
+    return resolveRoleLabel(m[1], profile, "Experience");
+  }
+
   return target;
 }

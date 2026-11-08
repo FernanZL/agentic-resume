@@ -70,6 +70,8 @@ export const MOCK_CANDIDATE_PROFILE: CandidateProfile = {
       id: "exp0",
       title: "Lead Software Engineer",
       organization: "Solstice Telemetry Inc.",
+      kind: "employment",
+      source_section: "Experience",
       location: "Seattle, WA",
       start: "Mar 2022",
       end: "Present",
@@ -92,6 +94,8 @@ export const MOCK_CANDIDATE_PROFILE: CandidateProfile = {
       id: "exp1",
       title: "Software Engineer II",
       organization: "Northwind Logistics",
+      kind: "employment",
+      source_section: "Experience",
       location: "Portland, OR",
       start: "Jul 2019",
       end: "Feb 2022",
@@ -103,6 +107,22 @@ export const MOCK_CANDIDATE_PROFILE: CandidateProfile = {
         {
           id: "exp1.b1",
           text: "Implemented Redis caching layer and query indexing that lowered database CPU load by 35%.",
+        },
+      ],
+    },
+    {
+      id: "exp2",
+      title: "OpenTelemetry Tail-Sampler CLI",
+      organization: "Open Source",
+      kind: "project",
+      source_section: "Projects",
+      location: "",
+      start: "",
+      end: "",
+      bullets: [
+        {
+          id: "exp2.b0",
+          text: "Built a deterministic trace-replay CLI in Go for benchmarking tail-sampling policies.",
         },
       ],
     },
@@ -126,9 +146,9 @@ export const MOCK_CANDIDATE_PROFILE: CandidateProfile = {
     "CI/CD",
     "REST APIs",
   ],
-  certifications: [],
+  certifications: ["CKA — Certified Kubernetes Administrator (2024)"],
   languages: ["English"],
-  other: [],
+  other: ["Speaker, GopherCon NW 2025"],
 };
 
 export const MOCK_REPORTS: Record<string, Report> = {
@@ -255,6 +275,9 @@ export const MOCK_REPORTS: Record<string, Report> = {
     linkedin: {
       summary:
         "LinkedIn profile reads as a mid-senior generalist and omits the 45,000 events/sec scale, Kafka/PostgreSQL migration metrics, and Staff-level architecture scope present on the resume.",
+      basis: "profile",
+      sources: [],
+      limitations: [],
       headline_issues: [
         "Current headline ('Lead Software Engineer at Solstice Telemetry') lacks target role keywords ('Distributed Systems', 'Python & Go', 'High-Throughput Streaming').",
       ],
@@ -414,6 +437,8 @@ export function createInitialMockSnapshot(
       notes: "Staff IC level, Seattle or Remote",
     },
     has_linkedin: hasLinkedin,
+    profile: MOCK_CANDIDATE_PROFILE,
+    revision: "rev-initial-1",
     messages: [
       {
         id: "msg-1",
@@ -445,6 +470,8 @@ export function createDemoReviewMockSnapshot(sessionId = "demo"): SessionSnapsho
       notes: "Staff IC6 level, Seattle or Remote",
     },
     has_linkedin: true,
+    profile: MOCK_CANDIDATE_PROFILE,
+    revision: "rev-demo-1",
     messages: [
       {
         id: "msg-demo-1",

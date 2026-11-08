@@ -51,7 +51,7 @@ The live run is drawn as an orchestral score: one staff per agent on a shared ti
 ```bash
 cp .env.example .env          # add OPENROUTER_API_KEY (and TAVILY_API_KEY for web research)
 docker compose up             # Postgres + API (hot reload) + web (Vite)
-open http://localhost:5173    # API docs: http://localhost:8000/docs
+open http://localhost:5173    # API docs: http://localhost:8001/docs
 ```
 
 Without Docker:
@@ -62,6 +62,12 @@ cd web && npm install && npm run dev
 ```
 
 ## Tests and evals
+
+Follow-up questions use the saved session and reviewed documents, including during review. Suggested wording can be loaded into Edit and is only applied when you explicitly submit review decisions. Finished documents can be explicitly amended without a full analysis. Replacing the analysis uses a separate confirmation action; stale review submissions are refused. The gap report measures the original resume; the assistant can inspect current keyword coverage.
+
+For a public LinkedIn audit, supply your exact `https://www.linkedin.com/in/...` URL in the resume or in chat before the initial analysis. Tavily uses advanced search with raw content and only accepts results for that exact profile. If it is unavailable, the app continues with clearly labelled resume-based preparation; an export or pasted profile enables a more specific audit. Fallback research uses at most two explicitly supplied portfolio/repository pages and one official-guidance search, cached by role for 24 hours. Guidance and character counts are advisory rather than claimed live-verified platform rules. The app does not log into LinkedIn or guess identities.
+
+Offline regressions cover accidental reruns, reviewed exports surviving follow-ups, supported keyword rewrites, exact-profile retrieval, mixed career sections and an actual old-format pending checkpoint. UI tests cover undecided proposals, bulk acceptance, retained edits/rejections and saved decisions. The real-model eval runner exits with a failure if a case errors, loses a previously matched keyword, omits an evidence-backed keyword, retains unsupported numbers, or fails labelled section/attribution expectations. The `career-changer` case separates projects and unrelated employment. Scores and remaining gaps are saved in `evals/results/`. Running real-model evaluations spends provider credits and remains separate from the offline checks.
 
 ```bash
 uv run pytest                                   # agents, API, tools, evals runner: stub models only

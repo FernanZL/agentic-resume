@@ -48,6 +48,37 @@ async def test_health(client):
     assert response.json() == {"status": "ok", "database": True}
 
 
+async def test_followup_preserves_reviewed_snapshot_and_export(client, services):
+    session_id = await new_session(client, services)
+    path = f"/api/sessions/{session_id}"
+    response = await client.post(
+        path + "/review",
+        json={
+            "decisions": {
+                "resume:summary": {"action": "edit", "text": "The summary I approved."},
+            }
+        },
+    )
+    assert response.status_code == 202
+    await services.runner.wait(session_id)
+    before = (await client.get(path)).json()
+    before_export = (await client.get(path + "/export?format=json")).json()
+    response = await client.post(
+        path + "/messages",
+        json={
+            "content": "Why didn't you add the missing keywords?",
+        },
+    )
+    assert response.status_code == 202
+    await services.runner.wait(session_id)
+    after = (await client.get(path)).json()
+    for key in ("target", "reports", "gap", "proposals", "decisions", "reviewed"):
+        assert after[key] == before[key], key
+    assert after["status"] == "idle"
+    assert (await client.get(path + "/export?format=json")).json() == before_export
+    assert before_export["resume"]["summary"] == "The summary I approved."
+
+
 async def test_posts_need_the_passcode(client):
     response = await client.post(
         "/api/documents/text",

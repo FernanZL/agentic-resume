@@ -9,6 +9,7 @@ from agent.llm import Models, structured
 from agent.prompts import prompt
 from agent.render import assign_ids
 from agent.schemas import CandidateProfile, LinkedInProfile
+from agent.sections import validate_sections
 from agent.state import AnalysisState
 from agent.tools.fetch_url import untrusted
 
@@ -38,6 +39,7 @@ def make_intake(models: Models):
         )
         linkedin = result.linkedin if documents.get("linkedin") else None
         assign_ids(result.profile, linkedin)
+        warnings = validate_sections(result.profile, documents["resume"])
         unsafe = (
             (result.injection_reason or "hidden instructions") if result.injection_found else ""
         )
@@ -45,6 +47,11 @@ def make_intake(models: Models):
             unsafe = "instruction-like text aimed at AI systems was removed"
         if unsafe:
             emit("tool_called", "intake", tool="screen", summary="Hidden instructions ignored")
-        return {"profile": result.profile, "linkedin": linkedin, "unsafe": unsafe}
+        return {
+            "profile": result.profile,
+            "linkedin": linkedin,
+            "unsafe": unsafe,
+            "section_warnings": warnings,
+        }
 
     return intake

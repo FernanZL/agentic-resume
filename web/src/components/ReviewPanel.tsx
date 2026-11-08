@@ -7,9 +7,13 @@
 import { type ReactNode, useState } from "react";
 import {
   type Action,
+  type CandidateProfile,
   type Decision,
   type Proposal,
   type ReviewDraftEntry,
+  type LinkedInGuidanceItem,
+  getLinkedInCopyIssues,
+  getLinkedInGuidance,
   reconcileReviewDrafts,
 } from "../api";
 import { type StaffNode, targetName } from "../score";
@@ -17,12 +21,19 @@ import { IconAlert, IconCheck } from "./Icons";
 
 export interface ReviewPanelProps {
   proposals: Proposal[];
+  profile?: CandidateProfile | null;
+  linkedinGuidance?: Record<string, LinkedInGuidanceItem>;
+  locked?: boolean;
   initialDecisions: Record<string, Decision>;
   drafts?: Record<string, ReviewDraftEntry>;
   onDraftsChange?: (next: Record<string, ReviewDraftEntry>) => void;
   isReviewPending: boolean;
+  isReviewed?: boolean;
   submitting: boolean;
+  amending?: boolean;
   onSubmitReview: (decisions: Record<string, Decision>) => Promise<void>;
+  onAmendReview?: (decisions: Record<string, Decision>) => Promise<void>;
+  onAskAboutProposal?: (proposal: Proposal) => void;
   onOpenStaff?: (node: StaffNode) => void;
 }
 
@@ -51,12 +62,19 @@ const ACTIONS: Array<{ id: Action; label: string }> = [
 
 export function ReviewPanel({
   proposals,
+  profile,
+  linkedinGuidance: guidanceByTarget,
+  locked = false,
   initialDecisions,
   drafts,
   onDraftsChange,
   isReviewPending,
+  isReviewed = false,
   submitting,
+  amending = false,
   onSubmitReview,
+  onAmendReview,
+  onAskAboutProposal,
   onOpenStaff,
 }: ReviewPanelProps) {
   const [internalDrafts, setInternalDrafts] = useState<Record<string, ReviewDraftEntry>>(() =>
@@ -67,6 +85,7 @@ export function ReviewPanel({
     proposals,
     initialDecisions,
     drafts ?? internalDrafts,
+    { preserveEditsOnConflict: true },
   );
 
   const updateDrafts = (next: Record<string, ReviewDraftEntry>) => {
@@ -80,15 +99,19 @@ export function ReviewPanel({
   const getDecision = (p: Proposal): ReviewDraftEntry => {
     return (
       effectiveDrafts[p.id] ?? {
-        action: p.status === "ok" ? "accept" : "reject",
+        action: null,
         text: p.proposed,
         proposedAtDraft: p.proposed,
       }
     );
   };
 
+  const canEditDrafts = isReviewPending || Boolean(isReviewed && onAmendReview);
+  const editLocked = !canEditDrafts || submitting || amending || locked;
+  const submitLocked = !isReviewPending || submitting || locked;
+
   const setProposalAction = (proposal: Proposal, action: Action) => {
-    if (!isReviewPending || submitting) return;
+    if (editLocked) return;
     const prev = getDecision(proposal);
     updateDrafts({
       ...effectiveDrafts,
@@ -96,27 +119,48 @@ export function ReviewPanel({
         action,
         text: prev.text || proposal.proposed,
         proposedAtDraft: proposal.proposed,
+        issues: prev.issues,
       },
     });
   };
 
   const setProposalEditText = (proposal: Proposal, text: string) => {
-    if (!isReviewPending || submitting) return;
+    if (editLocked) return;
+    const prev = getDecision(proposal);
     updateDrafts({
       ...effectiveDrafts,
       [proposal.id]: {
         action: "edit",
         text,
         proposedAtDraft: proposal.proposed,
+        issues: prev.issues,
       },
     });
   };
 
+  const isCriticFlagged = (p: Proposal) => p.status === "flagged" || p.issues.length > 0;
+
+  const getAdvisoryIssues = (p: Proposal): string[] => {
+    const current = getDecision(p);
+    const activeText = current.action === "edit" ? current.text : p.proposed;
+    const linkedinGuidance =
+      p.document === "linkedin"
+        ? getLinkedInGuidance(p.target, profile, guidanceByTarget?.[p.target])
+        : null;
+    const linkedinCopyIssues =
+      p.document === "linkedin"
+        ? getLinkedInCopyIssues(p.target, activeText, profile, linkedinGuidance ?? undefined)
+        : [];
+    return Array.from(new Set([...(current.issues ?? []), ...linkedinCopyIssues]));
+  };
+
+  const isCleanToAccept = (p: Proposal) => !isCriticFlagged(p) && getAdvisoryIssues(p).length === 0;
+
   const handleAcceptAllOk = () => {
-    if (!isReviewPending || submitting) return;
+    if (submitLocked) return;
     const next: Record<string, ReviewDraftEntry> = { ...effectiveDrafts };
     proposals.forEach((p) => {
-      if (p.status === "ok") {
+      if (isCleanToAccept(p) && next[p.id]?.action === null) {
         next[p.id] = {
           action: "accept",
           text: next[p.id]?.text || p.proposed,
@@ -127,17 +171,32 @@ export function ReviewPanel({
     updateDrafts(next);
   };
 
-  const handleSubmit = async () => {
-    if (!isReviewPending || submitting) return;
+  const hasEmptyEdit = proposals.some((p) => {
+    const d = getDecision(p);
+    return d.action === "edit" && !d.text.trim();
+  });
+  const hasStaleDraft = proposals.some((p) => getDecision(p).stale);
+
+  const buildPayload = (): Record<string, Decision> => {
     const payload: Record<string, Decision> = {};
     proposals.forEach((p) => {
       const d = getDecision(p);
       payload[p.id] = {
-        action: d.action,
-        text: d.action === "edit" ? d.text : "",
+        action: d.action ?? "reject",
+        text: d.action === "edit" ? d.text.trim() : "",
       };
     });
-    await onSubmitReview(payload);
+    return payload;
+  };
+
+  const handleSubmit = async () => {
+    if (submitLocked || hasEmptyEdit || hasStaleDraft) return;
+    await onSubmitReview(buildPayload());
+  };
+
+  const handleAmend = async () => {
+    if (!isReviewed || !onAmendReview || editLocked || hasEmptyEdit || hasStaleDraft) return;
+    await onAmendReview(buildPayload());
   };
 
   if (proposals.length === 0) {
@@ -152,9 +211,12 @@ export function ReviewPanel({
     );
   }
 
-  const okCount = proposals.filter((p) => p.status === "ok").length;
+  const okCount = proposals.filter((p) => !isCriticFlagged(p)).length;
   const flaggedCount = proposals.length - okCount;
-  const locked = !isReviewPending || submitting;
+  const undecidedCount = proposals.filter((p) => getDecision(p).action === null).length;
+  const passedUndecidedCount = proposals.filter(
+    (p) => isCleanToAccept(p) && getDecision(p).action === null,
+  ).length;
 
   return (
     <section className="review" aria-labelledby="review-title">
@@ -166,23 +228,30 @@ export function ReviewPanel({
             in placeholders like <mark className="placeholder">[X]%</mark> with your real numbers
             through Edit. Proposals left without a decision count as rejected.
           </p>
+          {isReviewPending ? <p role="status">{undecidedCount} awaiting your decision.</p> : null}
           {!isReviewPending ? (
             <p className="review-closed">
-              This review is closed. For later changes, ask the assistant to revise a proposal in
-              the chat.
+              {isReviewed && onAmendReview
+                ? "Draft changes here or ask the assistant for wording, then choose Apply Reviewed Edits."
+                : "This review is closed. For later changes, ask the assistant to revise a proposal in the chat."}
             </p>
           ) : null}
         </div>
         <div className="review-actions">
-          <button type="button" className="btn" onClick={handleAcceptAllOk} disabled={locked}>
+          <button
+            type="button"
+            className="btn"
+            onClick={handleAcceptAllOk}
+            disabled={submitLocked || passedUndecidedCount === 0}
+          >
             <IconCheck width={15} height={15} aria-hidden="true" />
-            Accept all that passed ({okCount})
+            Accept all that passed ({passedUndecidedCount})
           </button>
           <button
             type="button"
             className="btn btn-primary"
             onClick={() => void handleSubmit()}
-            disabled={locked}
+            disabled={submitLocked || hasEmptyEdit || hasStaleDraft}
           >
             {submitting
               ? "Applying your decisions…"
@@ -190,19 +259,45 @@ export function ReviewPanel({
                 ? "Submit Review & Finalize"
                 : "Review Finalized"}
           </button>
+          {!isReviewPending && isReviewed && onAmendReview ? (
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={() => void handleAmend()}
+              disabled={editLocked || hasEmptyEdit || hasStaleDraft}
+            >
+              {amending ? "Applying reviewed edits…" : "Apply Reviewed Edits"}
+            </button>
+          ) : null}
         </div>
       </header>
 
+      {hasEmptyEdit ? (
+        <p role="alert">Fill in each edited proposal, or choose Reject before submitting.</p>
+      ) : null}
       <ol className="proposals">
         {proposals.map((p) => {
           const current = getDecision(p);
           const writer: StaffNode = p.document === "resume" ? "resume_writer" : "linkedin_writer";
+          const activeText = current.action === "edit" ? current.text : p.proposed;
+          const linkedinGuidance =
+            p.document === "linkedin"
+              ? getLinkedInGuidance(p.target, profile, guidanceByTarget?.[p.target])
+              : null;
+          const advisoryIssues = getAdvisoryIssues(p);
+          const criticFlagged = isCriticFlagged(p);
+          const isFlagged = criticFlagged || advisoryIssues.length > 0;
+          const isEmptyEdit = current.action === "edit" && !current.text.trim();
+          const placeholders = p.placeholders ?? [];
+          const keywords = p.keywords ?? [];
+          const rationaleText = p.rationale || "";
+
           return (
             <li
               key={p.id}
               id={`proposal-${p.id}`}
               tabIndex={-1}
-              className={`proposal proposal-${current.action}${p.status === "flagged" ? " proposal-flagged" : ""}`}
+              className={`proposal proposal-${current.action ?? "undecided"}${isFlagged ? " proposal-flagged" : ""}`}
               aria-label={`Proposal ${p.id}`}
             >
               <div className="proposal-head">
@@ -210,12 +305,21 @@ export function ReviewPanel({
                   {p.document === "resume" ? "Resume" : "LinkedIn"}
                 </span>
                 <span className="proposal-target" title={p.id}>
-                  {targetName(p.target)}
+                  {p.document === "linkedin" &&
+                  /^(?:li|exp)\d+$/.test(p.target) &&
+                  guidanceByTarget?.[p.target]
+                    ? guidanceByTarget[p.target]!.section
+                    : targetName(p.target, profile)}
                 </span>
-                {p.status === "flagged" ? (
+                {criticFlagged ? (
                   <span className="verdict verdict-flagged">
                     <IconAlert width={14} height={14} aria-hidden="true" />
                     Critic Flagged
+                  </span>
+                ) : advisoryIssues.length > 0 ? (
+                  <span className="verdict verdict-flagged">
+                    <IconAlert width={14} height={14} aria-hidden="true" />
+                    Advisory Flagged
                   </span>
                 ) : (
                   <span className="verdict">
@@ -232,6 +336,15 @@ export function ReviewPanel({
                     Written by the {p.document === "resume" ? "resume" : "LinkedIn"} writer
                   </button>
                 ) : null}
+                {onAskAboutProposal ? (
+                  <button
+                    type="button"
+                    className="text-link proposal-source"
+                    onClick={() => onAskAboutProposal(p)}
+                  >
+                    Ask in chat
+                  </button>
+                ) : null}
                 <div className="decision" role="radiogroup" aria-label={`Decision for ${p.id}`}>
                   {ACTIONS.map((a) => (
                     <button
@@ -240,7 +353,7 @@ export function ReviewPanel({
                       role="radio"
                       aria-checked={current.action === a.id}
                       className={`decision-opt decision-${a.id}`}
-                      disabled={locked}
+                      disabled={editLocked}
                       onClick={() => setProposalAction(p, a.id)}
                     >
                       {a.label}
@@ -249,12 +362,47 @@ export function ReviewPanel({
                 </div>
               </div>
 
+              {linkedinGuidance ? (
+                <div className="linkedin-guide" aria-label={`LinkedIn placement for ${p.id}`}>
+                  <div className="linkedin-meta">
+                    <span>
+                      <strong>Where to paste:</strong> {linkedinGuidance.section} ·{" "}
+                      {linkedinGuidance.field}
+                    </span>
+                    <span className="linkedin-count">
+                      {activeText.length}
+                      {linkedinGuidance.character_limit !== null
+                        ? ` / ${linkedinGuidance.character_limit} chars`
+                        : " chars"}
+                    </span>
+                    {linkedinGuidance.character_limit !== null && !linkedinGuidance.verified ? (
+                      <span className="linkedin-advisory">Advisory limit (unverified)</span>
+                    ) : null}
+                  </div>
+                  <p className="linkedin-instructions">{linkedinGuidance.instructions}</p>
+                </div>
+              ) : null}
+
               {p.issues.length ? (
                 <ul className="issues" aria-label="The critic's concerns">
                   {p.issues.map((issue, i) => (
                     <li key={i}>{issue}</li>
                   ))}
                 </ul>
+              ) : null}
+
+              {advisoryIssues.length ? (
+                <ul className="issues" aria-label="Advisory & draft checks">
+                  {advisoryIssues.map((issue, i) => (
+                    <li key={i}>{issue}</li>
+                  ))}
+                </ul>
+              ) : null}
+
+              {current.stale ? (
+                <p className="ev-note" role="status">
+                  This proposal changed in another turn—verify your draft before submitting.
+                </p>
               ) : null}
 
               <div className="diff">
@@ -265,31 +413,40 @@ export function ReviewPanel({
                 <div className="diff-col diff-new">
                   <h3 className="diff-label">
                     Rewrite
-                    {p.placeholders.length ? (
-                      <span className="diff-hint"> · needs {p.placeholders.join(", ")}</span>
+                    {placeholders.length ? (
+                      <span className="diff-hint"> · needs {placeholders.join(", ")}</span>
                     ) : null}
                   </h3>
                   {current.action === "edit" ? (
-                    <textarea
-                      aria-label={`Edit text for ${p.id}`}
-                      className="field diff-edit"
-                      rows={4}
-                      disabled={locked}
-                      value={current.text}
-                      onChange={(e) => setProposalEditText(p, e.target.value)}
-                    />
+                    <>
+                      <textarea
+                        aria-label={`Edit text for ${p.id}`}
+                        className="field diff-edit"
+                        rows={4}
+                        disabled={editLocked}
+                        value={current.text}
+                        onChange={(e) => setProposalEditText(p, e.target.value)}
+                      />
+                      {isEmptyEdit ? (
+                        <p className="ev-note" role="alert">
+                          Edited text cannot be empty. Enter your wording or choose Accept / Reject.
+                        </p>
+                      ) : null}
+                    </>
                   ) : (
                     <p className="diff-text">{renderHighlightedText(p.proposed)}</p>
                   )}
                 </div>
               </div>
 
-              <p className="why">
-                <strong>Why:</strong> {p.rationale}
-              </p>
-              {p.keywords.length ? (
+              {rationaleText ? (
+                <p className="why">
+                  <strong>Why:</strong> {rationaleText}
+                </p>
+              ) : null}
+              {keywords.length ? (
                 <div className="chips" aria-label="Keywords this rewrite covers">
-                  {p.keywords.map((kw) => (
+                  {keywords.map((kw) => (
                     <span key={kw} className="chip">
                       {kw}
                     </span>

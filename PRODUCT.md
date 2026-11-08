@@ -25,7 +25,7 @@ Success: the user leaves with a resume they'd send, every change was their decis
 ## Operating Context
 
 - Session flow: upload or paste the resume (and optionally a LinkedIn "Save to PDF" export) → set the target (title required; company, posting URL or text optional) → chat with the assistant → a live timeline while the agents run → review proposals side by side → export.
-- An analysis takes minutes, not seconds; progress streams live (SSE). Chat is paused while a review is pending.
+- An analysis takes minutes, not seconds; progress streams live (SSE). During review, a separate assistant path can explain proposals and suggest local edit drafts while analysis remains paused. Changes require explicit review submission.
 - Sessions live at `/s/<id>` and can be reopened. A run cut off by a server restart or sleep can be resumed.
 - Public demo: a shared passcode and a daily cost cap guard it. Errors the user can hit include a wrong passcode, an exhausted budget, a failed run, and an interrupted run.
 
@@ -34,7 +34,7 @@ Success: the user leaves with a resume they'd send, every change was their decis
 - Stack: React 19 + Vite + TypeScript SPA in `web/`, served by FastAPI in production. Contract: `docs/CONTRACT.md` (frozen API, SSE events, error codes).
 - Pipeline steps (node names): concierge, intake, job_analyst, company_researcher, market_analyst, linkedin_auditor, gap_analysis, resume_writer, linkedin_writer, critic, review, finalize.
 - Proposal states: OK, or flagged by the critic (with issues). Decisions: accept, edit, reject; anything undecided counts as rejected.
-- LinkedIn is never scraped; the user supplies an export or pasted text.
+- LinkedIn input can be an export, pasted text, or an exact public profile URL supplied in the resume or chat before analysis. Public content is retrieved through Tavily's advanced search; unavailable content switches to clearly labelled preparation from the resume and role research, with bounded supplied sources and cached official guidance. An export or pasted text enables an actual profile audit. The app never logs into LinkedIn or guesses identities.
 - Must work at 390 px wide; deployed on Render's free tier (cold starts after idle).
 
 ## Brand Commitments

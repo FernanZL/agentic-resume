@@ -1,0 +1,16 @@
+{
+  "name": "career-changer",
+  "resume": "Jordan Example\njordan@example.com\nSummary\nCareer changer building Python APIs and open-source tools.\nProfessional Experience\nJunior Software Developer, Example Studio (2025 - Present)\n- Built Python APIs for internal reporting.\nPersonal Projects\nResume Explorer\n- Built a personal Python application that parses documents and exposes a REST API.\nEarlier Career\nScience Teacher, Example School (2017 - 2024)\n- Planned science lessons and explained complex topics to students.\nEducation\nBSc Science, Example University (2016)\nSkills\nPython, SQL, Git\nLanguages\nEnglish\n",
+  "target": {
+    "title": "Backend Developer",
+    "job_text": "Build Python REST APIs. SQL and Git are required. Kubernetes is a nice-to-have."
+  },
+  "expected_entries": [
+    {"title": "Junior Software Developer", "kind": "employment", "source_section": "Professional Experience"},
+    {"title": "Resume Explorer", "kind": "project", "source_section": "Personal Projects"},
+    {"title": "Science Teacher", "kind": "employment", "source_section": "Earlier Career"}
+  ],
+  "forbidden_entry_terms": {
+    "Science Teacher": ["Python", "Kubernetes", "microservices"]
+  }
+}

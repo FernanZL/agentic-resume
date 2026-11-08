@@ -96,6 +96,8 @@ class Runner:
             try:
                 await self._stream(session_id, run_id, payload, config)
                 state = await self.graph.aget_state({"configurable": config["configurable"]})
+                if target := state.values.get("target"):
+                    await self.db.set_target(session_id, target.model_dump())
                 status = await self.status_after_run(session_id, state)
                 await self._finish(session_id, run_id, status, "completed")
             except asyncio.CancelledError:

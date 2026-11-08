@@ -102,6 +102,10 @@ async def score(case, values, proposals, judge, cost, seconds) -> dict:
         values["profile"], values.get("linkedin"), proposals, values["decisions"]
     )
     after_text = profile_markdown(final.resume)
+    structure_errors = structure_failures(case, final.resume)
+    before_coverage = ats.keyword_coverage(before_text, keywords)
+    after_coverage = ats.keyword_coverage(after_text, keywords)
+    supported = ats.keyword_coverage(after_text, list(values.get("keyword_evidence") or {}))
     evidence = sources(values)
     fabricated = [
         pid for pid, p in proposals.items() if ats.unsupported_numbers(p.proposed, evidence)
@@ -119,8 +123,17 @@ async def score(case, values, proposals, judge, cost, seconds) -> dict:
     return {
         "case": case["name"],
         "proposals": len(proposals),
-        "coverage_before": round(ats.keyword_coverage(before_text, keywords).score, 3),
-        "coverage_after": round(ats.keyword_coverage(after_text, keywords).score, 3),
+        "coverage_before": round(before_coverage.score, 3),
+        "coverage_after": round(after_coverage.score, 3),
+        "remaining_keywords": after_coverage.missing,
+        "supported_keywords_omitted": supported.missing,
+        "structure_errors": structure_errors,
+        "checks": {
+            "coverage_not_regressed": set(before_coverage.matched) <= set(after_coverage.matched),
+            "supported_keywords_covered": not supported.missing,
+            "no_unsupported_numbers": not fabricated,
+            "source_structure_preserved": not structure_errors,
+        },
         "fabricated": fabricated,
         "flagged": sum(p.status == "flagged" for p in proposals.values()),
         "match_score": values["gap"].score if values.get("gap") else None,
@@ -130,6 +143,27 @@ async def score(case, values, proposals, judge, cost, seconds) -> dict:
         "cost_usd": round(cost, 4),
         "seconds": round(seconds, 1),
     }
+
+
+def structure_failures(case: dict, profile) -> list[str]:
+    """Score labelled source sections and attribution, independently of the model's own verdict."""
+    found = {r.title: r for r in profile.experience}
+    failures = []
+    for expected in case.get("expected_entries", []):
+        role = found.get(expected["title"])
+        if role is None:
+            failures.append(f"Missing source entry: {expected['title']}")
+        elif role.kind != expected["kind"] or role.source_section != expected["source_section"]:
+            failures.append(f"Incorrect kind or section: {expected['title']}")
+    for title, forbidden in case.get("forbidden_entry_terms", {}).items():
+        role = found.get(title)
+        text = " ".join(b.text for b in role.bullets) if role else ""
+        leaked = ats.keyword_coverage(text, forbidden).matched
+        if leaked:
+            failures.append(
+                f"Unrelated entry acquired unsupported role terms: {title}: {', '.join(leaked)}"
+            )
+    return failures
 
 
 async def main(names: list[str]) -> list[dict]:
@@ -154,6 +188,14 @@ async def main(names: list[str]) -> list[dict]:
     return results
 
 
+def passes(results: list[dict]) -> bool:
+    """Fail the evaluation run when a case errors or a behavioral quality gate fails."""
+    return bool(results) and all(
+        "error" not in result and bool(result.get("checks")) and all(result["checks"].values())
+        for result in results
+    )
+
+
 def report(results: list[dict]) -> None:
     print(
         f"{'case':22} {'props':>5} {'cov before':>10} {'cov after':>9} {'fabr':>4} "
@@ -171,4 +213,4 @@ def report(results: list[dict]) -> None:
 
 
 if __name__ == "__main__":
-    asyncio.run(main(sys.argv[1:]))
+    sys.exit(0 if passes(asyncio.run(main(sys.argv[1:]))) else 1)

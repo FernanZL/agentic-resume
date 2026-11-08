@@ -23,6 +23,11 @@ class Rubric(BaseModel):
     weak_bullets: list[str] = Field([], description="Bullet ids, e.g. 'exp0.b2'")
     strengths: list[str] = []
     priorities: list[str] = []
+    keyword_evidence: dict[str, str] = Field(
+        default_factory=dict,
+        description="Missing keyword -> exact quote from candidate documents supporting it. "
+        "Only semantic equivalents of existing experience; omit skills the candidate hasn't shown.",
+    )
 
 
 def job_keywords(reports: dict[str, Report]) -> list[str]:
@@ -58,10 +63,23 @@ def make_gap_analysis(models: Models):
             [
                 SystemMessage(prompt("gap_rubric")),
                 HumanMessage(untrusted(profile.model_dump_json(), "resume")),
+                HumanMessage(untrusted(state["documents"]["resume"], "supplied resume")),
                 HumanMessage(json.dumps(findings, ensure_ascii=False)),
             ]
         )
         bullet_ids = {b.id for role in profile.experience for b in role.bullets}
+        source = " ".join(state["documents"]["resume"].split())
+        supported = {
+            keyword: quote
+            for keyword, quote in rubric.keyword_evidence.items()
+            if keyword in coverage.missing and quote.strip() and " ".join(quote.split()) in source
+        }
+        keyword_priorities = [
+            f"Use '{keyword}' where supported by: {supported[keyword]}"
+            if keyword in supported
+            else f"Confirm experience before adding '{keyword}'; no verified evidence yet."
+            for keyword in coverage.missing
+        ]
         gap = GapReport(
             score=rubric.score,
             keyword_coverage=round(coverage.score, 3),
@@ -70,9 +88,9 @@ def make_gap_analysis(models: Models):
             format_issues=issues,
             weak_bullets=[b for b in rubric.weak_bullets if b in bullet_ids],
             strengths=rubric.strengths,
-            priorities=rubric.priorities,
+            priorities=[*keyword_priorities, *rubric.priorities],
         )
         emit("gap_ready", "gap_analysis", score=gap.score, keyword_coverage=gap.keyword_coverage)
-        return {"gap": gap}
+        return {"gap": gap, "keyword_evidence": supported}
 
     return gap_analysis
