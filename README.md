@@ -27,11 +27,14 @@ flowchart LR
     RV <-. accept / edit / reject .-> U
 ```
 
-- **Concierge**: a bounded ReAct agent. It asks clarifying questions, and its `request_analysis` tool returns a `Command` that routes into the analysis **subgraph** in code, with no extra model call. Afterwards it explains the results and revises single proposals on request.
-- **Research fan-out**: `Send` starts only the researchers that apply (no company research without a company, no LinkedIn audit without a profile). Each runs a private tool loop (Tavily search, fetch) capped at 4 calls, with a `RetryPolicy` on rate limits and timeouts.
+- **Concierge**: a bounded ReAct agent. It asks clarifying questions, and its `request_analysis` tool returns a `Command` that routes into the analysis **subgraph** in code, with no extra model call. Afterwards it explains the results and drafts checked rewrites of single proposals; nothing is applied until you load a draft into Edit and submit it.
+- **Research fan-out**: `Send` starts only the researchers that apply (no company research without a company). Each runs a private tool loop (Tavily search, fetch) capped at 4 calls, with a `RetryPolicy` on rate limits and timeouts.
+- **LinkedIn**: with an export or pasted profile, the auditor audits it. With your exact `https://www.linkedin.com/in/...` URL (in the resume or in chat, before the analysis), Tavily advanced search retrieves that profile and nothing else. Otherwise the app prepares LinkedIn copy from your resume and labels it as such, using at most two portfolio or repository pages you supplied and one search for official guidance (cached by role for 24 hours). Character counts are advisory. The app never logs into LinkedIn or guesses identities.
 - **Gap analysis**: keyword coverage and ATS format checks are counted in code; a model adds a recruiter's rubric on top.
 - **Writers and critic**: an evaluator-optimizer loop. Numbers are checked against your documents in code, and anything else is judged by a model. Flagged proposals go back to their writer for at most two rewrites. Unverifiable numbers end up as `[X]` placeholders for you to fill in. Nothing is invented silently.
-- **Review**: `interrupt()` inside the subgraph. The run is checkpointed in Postgres and resumes with your decisions, even after a restart.
+- **Review**: `interrupt()` inside the subgraph. The run is checkpointed in Postgres and resumes with your decisions, even after a restart. Every proposal starts undecided; bulk acceptance keeps your edits and rejections.
+- **Conversation around the review**: while the review is pending, you can still ask about your documents and the analysis; that chat reads the saved session without resuming the interrupted graph. Afterwards, finished documents can be amended without a full rerun. Submissions carry a version, so a stale review is refused, and running a fresh analysis needs its own confirmation.
+- **Section fidelity**: intake keeps employment, projects and volunteering apart, with their original headings and order, and exports keep that structure. Evidence checks stop project skills from being credited to unrelated jobs.
 
 ## The interface
 
@@ -63,11 +66,9 @@ cd web && npm install && npm run dev
 
 ## Tests and evals
 
-Follow-up questions use the saved session and reviewed documents, including during review. Suggested wording can be loaded into Edit and is only applied when you explicitly submit review decisions. Finished documents can be explicitly amended without a full analysis. Replacing the analysis uses a separate confirmation action; stale review submissions are refused. The gap report measures the original resume; the assistant can inspect current keyword coverage.
+The offline suite uses stub models and never touches the network. Its regressions cover accidental reruns, reviewed exports surviving follow-ups, supported keyword rewrites, exact-profile retrieval, mixed career sections and an old-format pending checkpoint. UI tests cover undecided proposals, bulk acceptance, retained edits and rejections, and saved decisions.
 
-For a public LinkedIn audit, supply your exact `https://www.linkedin.com/in/...` URL in the resume or in chat before the initial analysis. Tavily uses advanced search with raw content and only accepts results for that exact profile. If it is unavailable, the app continues with clearly labelled resume-based preparation; an export or pasted profile enables a more specific audit. Fallback research uses at most two explicitly supplied portfolio/repository pages and one official-guidance search, cached by role for 24 hours. Guidance and character counts are advisory rather than claimed live-verified platform rules. The app does not log into LinkedIn or guess identities.
-
-Offline regressions cover accidental reruns, reviewed exports surviving follow-ups, supported keyword rewrites, exact-profile retrieval, mixed career sections and an actual old-format pending checkpoint. UI tests cover undecided proposals, bulk acceptance, retained edits/rejections and saved decisions. The real-model eval runner exits with a failure if a case errors, loses a previously matched keyword, omits an evidence-backed keyword, retains unsupported numbers, or fails labelled section/attribution expectations. The `career-changer` case separates projects and unrelated employment. Scores and remaining gaps are saved in `evals/results/`. Running real-model evaluations spends provider credits and remains separate from the offline checks.
+The eval runner uses real models on the cases in `evals/cases/` (one of them, `career-changer`, mixes projects with unrelated employment). It fails if a case errors, loses a keyword it already matched, omits a keyword the evidence supports, keeps unsupported numbers, or misses its labelled section and attribution expectations. A model judge also rates each result. Scores and remaining gaps are saved in `evals/results/`. It spends provider credits, so it is kept apart from the offline checks; no baseline has been recorded yet.
 
 ```bash
 uv run pytest                                   # agents, API, tools, evals runner: stub models only
@@ -88,9 +89,10 @@ agent/      graph.py (session graph), analysis.py (subgraph), concierge.py, node
 backend/    main.py, routers/, runner.py (background runs → events), events.py (SSE), budget.py, database.py, export.py
 web/        React + Vite + TypeScript SPA: chat, live agent timeline, review, export
 evals/      golden cases and the scoring runner
-docs/       SPEC (design), CONTRACT (API, events, tools), CODE_STANDARDS, STATUS
+docs/       SPEC (design), CONTRACT (API, events, tools), CODE_STANDARDS, STATUS, product review notes
+PRODUCT.md  who the app is for; DESIGN.md the visual system ("The Score")
 ```
 
 ## Built by a team of agents
 
-Claude (lead) designed the system with **argon** (Antigravity), owned the contracts, graphs, backend and deploy, and integrated everything. argon built the agent tools and the web app. **sol** (Codex) reviewed every phase, and its findings (SSRF, admission races, budget reservations, PII in events) were fixed before each commit. See `AGENTS.md` for the ownership rules.
+Claude (lead) designed the system with **argon** (Antigravity), built the contracts, graphs, backend and deploy, and integrated everything. argon built the agent tools and the original web app, which Claude later redesigned. **sol** (Codex) reviewed every phase, and its findings (SSRF, admission races, budget reservations, PII in events) were fixed before each commit. Those assignments are history, not access rules: any agent may work in any part of the repo when the user or the orchestrator authorizes it. See `AGENTS.md` for how agents coordinate.
